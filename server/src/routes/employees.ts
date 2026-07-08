@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import {
   getCityEmployees,
+  getEmployee,
   createEmployee,
   updateEmployee,
   deleteEmployee,
@@ -38,6 +39,7 @@ const upload = multer({
 });
 
 router.post('/', createEmployee);
+router.get('/:id', getEmployee);
 router.patch('/:id', updateEmployee);
 router.delete('/:id', deleteEmployee);
 router.post('/:id/photo', upload.single('photo'), uploadPhoto);

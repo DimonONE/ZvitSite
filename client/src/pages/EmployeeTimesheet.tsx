@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTimesheet, updateTimesheet } from '../api';
-import { Timesheet } from '../types';
+import { getTimesheet, updateTimesheet, getCities, getEmployee } from '../api';
+import { Timesheet, City, Employee } from '../types';
 
 interface DayEntry {
   day: number;
@@ -29,7 +29,7 @@ const generateDays = (year: number, month: number): DayEntry[] => {
 };
 
 const WorkDaysForm = () => {
-  const { cityId, employeeId } = useParams<{ cityId: string; employeeId: string }>();
+  const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
 
   const [currentDate] = useState(new Date());
@@ -40,23 +40,45 @@ const WorkDaysForm = () => {
   const [quickFillHours, setQuickFillHours] = useState(11);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cityName, setCityName] = useState<string>('');
+  const [employeeName, setEmployeeName] = useState<string>('');
 
   useEffect(() => {
-    loadTimesheet();
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeId, year, month]);
 
-  const loadTimesheet = async () => {
+  const loadData = async () => {
+    console.log('Loading data for employeeId:', employeeId);
     if (!employeeId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const response = await getTimesheet(employeeId, year, month);
-      const fetchedDays = (response.data.days ?? []) as Array<{
+      // Завантажуємо дані паралельно
+      const [employeeResponse, timesheetResponse] = await Promise.all([
+        getEmployee(employeeId),
+        getTimesheet(employeeId, year, month),
+      ]);
+
+      console.log('Employee response:', employeeResponse.data);
+      console.log('Timesheet response:', timesheetResponse.data);
+
+      const employee = employeeResponse.data;
+      setEmployeeName(employee.fullName);
+
+      // Тепер завантажуємо місто за cityId працівника
+      const citiesResponse = await getCities();
+      const city = citiesResponse.data.find((c: City) => c._id === employee.cityId);
+      if (city) {
+        setCityName(city.name);
+      }
+
+      const fetchedDays = (timesheetResponse.data.days ?? []) as Array<{
         day: number;
         hours?: number | null;
+        status?: string;
       }>;
 
       setDays(
@@ -68,7 +90,8 @@ const WorkDaysForm = () => {
         })
       );
     } catch (error) {
-      console.error('Failed to load timesheet:', error);
+      console.error('Failed to load data:', error);
+      alert('Помилка завантаження даних');
     } finally {
       setLoading(false);
     }
@@ -231,7 +254,9 @@ const WorkDaysForm = () => {
 
       {/* Desktop header: breadcrumb + full title */}
       <div className="hidden md:block">
-        <p className="text-[#737a85] text-xs truncate">Міста / Київ / Іван Петренко</p>
+        <p className="text-[#737a85] text-xs truncate">
+          Міста / {cityName || 'Завантаження...'} / {employeeName || 'Завантаження...'}
+        </p>
         <h1 className="text-[#1c2126] text-2xl font-bold mt-2">
           Додати / Редагувати робочі дні
         </h1>
@@ -244,7 +269,7 @@ const WorkDaysForm = () => {
           <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Місто</span>
             <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
-              <span className="text-[#1c2126] text-sm">Київ</span>
+              <span className="text-[#1c2126] text-sm">{cityName || 'Завантаження...'}</span>
             </div>
           </div>
           <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
@@ -256,7 +281,7 @@ const WorkDaysForm = () => {
           <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Працівник</span>
             <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
-              <span className="text-[#1c2126] text-sm">Іван Петренко</span>
+              <span className="text-[#1c2126] text-sm">{employeeName || 'Завантаження...'}</span>
             </div>
           </div>
         </div>

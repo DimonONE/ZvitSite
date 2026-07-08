@@ -16,6 +16,7 @@ export const deleteCity = (id: string) => api.delete(`/cities/${id}`);
 
 // Employees
 export const getCityEmployees = (cityId: string) => api.get<Employee[]>(`/cities/${cityId}/employees`);
+export const getEmployee = (id: string) => api.get<Employee>(`/employees/${id}`);
 export const createEmployee = (data: Partial<Employee>) => api.post<Employee>('/employees', data);
 export const updateEmployee = (id: string, data: Partial<Employee>) => api.patch<Employee>(`/employees/${id}`, data);
 export const deleteEmployee = (id: string) => api.delete(`/employees/${id}`);
