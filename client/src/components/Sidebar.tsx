@@ -13,7 +13,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-60 h-full bg-white border-r border-[#e5e8ed] flex flex-col gap-1 pt-6 px-5">
+    <aside className="hidden md:flex w-60 h-full bg-white border-r border-[#e5e8ed] flex-col gap-1 pt-6 px-5">
       {/* Logo */}
       <div className="flex items-center gap-2 shrink-0 mb-5">
         <div className="w-7 h-7 bg-[#21ba6b] rounded-lg shrink-0" />

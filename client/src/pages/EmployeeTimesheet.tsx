@@ -130,6 +130,8 @@ const WorkDaysForm = () => {
     }
   };
 
+  // On mobile everything stacks into a single column;
+  // from md breakpoint up we split into two columns like on desktop.
   const half = Math.ceil(days.length / 2);
   const columns = [days.slice(0, half), days.slice(half)];
 
@@ -141,7 +143,7 @@ const WorkDaysForm = () => {
     return (
       <div
         key={entry.day}
-        className={`flex gap-2.5 h-9 items-center px-2.5 rounded-md ${rowBg}`}
+        className={`flex gap-2 md:gap-2.5 h-9 items-center px-2 md:px-2.5 rounded-md ${rowBg}`}
       >
         <button
           type="button"
@@ -156,15 +158,15 @@ const WorkDaysForm = () => {
           {entry.selected && <span className="text-white text-[10px] font-bold">✓</span>}
         </button>
 
-        <div className="flex gap-2.5 items-center text-[13px] w-[90px] shrink-0">
+        <div className="flex gap-2 md:gap-2.5 items-center text-[13px] w-[70px] md:w-[90px] shrink-0">
           <span className="font-medium text-[#1c2126]">{entry.day}</span>
           <span className="text-[#737a85]">{entry.weekday}</span>
         </div>
 
-        <div className="flex-1 h-px bg-[#e5e8ed]" />
+        <div className="flex-1 md:h-px md:bg-[#e5e8ed]" />
 
         <div
-          className={`bg-white border ${hourBoxBorder} flex h-7 items-center justify-center rounded-md w-[74px] shrink-0`}
+          className={`bg-white border ${hourBoxBorder} flex h-7 items-center justify-center rounded-md w-[64px] md:w-[74px] shrink-0`}
         >
           {entry.hours === null ? (
             <button
@@ -189,11 +191,13 @@ const WorkDaysForm = () => {
           )}
         </div>
 
+        {/* Copy-to-next-day button is hidden on the smallest screens to save
+            horizontal space; still available from the sm breakpoint up. */}
         <button
           type="button"
           onClick={() => copyToNextDay(entry.day)}
           disabled={entry.day === days.length}
-          className="bg-white border border-[#e5e8ed] flex h-7 items-center justify-center rounded-md shrink-0 w-7 text-[#737a85] text-xs disabled:opacity-30"
+          className="hidden sm:flex bg-white border border-[#e5e8ed] h-7 items-center justify-center rounded-md shrink-0 w-7 text-[#737a85] text-xs disabled:opacity-30"
           title="Скопіювати години на наступний день"
         >
           ⧉
@@ -211,35 +215,82 @@ const WorkDaysForm = () => {
   }
 
   return (
-    <div className="bg-[#fafafc] flex flex-col gap-2 px-10 py-8">
-      <p className="text-[#737a85] text-xs">Міста / Київ / Іван Петренко</p>
-      <h1 className="text-[#1c2126] text-2xl font-bold">Додати / Редагувати робочі дні</h1>
+    <div className="bg-[#fafafc] flex flex-col gap-4 md:gap-2 px-4 py-4 md:px-10 md:py-8">
+      {/* Mobile header: back arrow + short title */}
+      <div className="flex items-center gap-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Назад"
+          className="text-[#1c2126] text-xl leading-none"
+        >
+          ←
+        </button>
+        <h1 className="text-[#1c2126] text-lg font-bold">Робочі дні</h1>
+      </div>
 
-      <div className="bg-white border border-[#e5e8ed] rounded-2xl p-6 flex flex-col gap-2.5 mt-4">
-        {/* Top fields */}
-        <div className="flex gap-5 items-start">
-          <div className="flex flex-col gap-1.5">
+      {/* Desktop header: breadcrumb + full title */}
+      <div className="hidden md:block">
+        <p className="text-[#737a85] text-xs truncate">Міста / Київ / Іван Петренко</p>
+        <h1 className="text-[#1c2126] text-2xl font-bold mt-2">
+          Додати / Редагувати робочі дні
+        </h1>
+      </div>
+
+      <div className="bg-white md:border md:border-[#e5e8ed] rounded-none md:rounded-2xl p-0 md:p-6 flex flex-col gap-4 md:gap-2.5 md:mt-4">
+        {/* Top fields: stacked on mobile, in a row from md */}
+
+        <div className="flex flex-col md:flex-row gap-3 md:gap-5 items-stretch md:items-start">
+          <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Місто</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-[340px]">
+            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
               <span className="text-[#1c2126] text-sm">Київ</span>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 w-[340px]">
+          <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Дата (місяць)</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-[340px]">
+            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
               <span className="text-[#1c2126] text-sm">{getMonthName()} {year}</span>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 w-[340px]">
+          <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Працівник</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-[340px]">
+            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
               <span className="text-[#1c2126] text-sm">Іван Петренко</span>
             </div>
           </div>
         </div>
 
-        {/* Quick fill panel */}
-        <div className="bg-[#f2fcf5] border border-[#e5f7eb] flex gap-3 items-center px-4 py-3.5 rounded-xl">
+        {/* Quick fill panel — mobile: compact row, count folded into the button label */}
+        <div className="flex flex-col gap-2 md:hidden">
+          <span className="text-[#1c2126] text-[13px] font-semibold flex items-center gap-1.5">
+            <span className="text-[#21ba6b]">⚡</span> Швидке заповнення
+          </span>
+          <div className="flex gap-2.5 items-center">
+            <div className="bg-white border border-[#e5e8ed] flex h-11 items-center px-3 rounded-lg w-[92px] shrink-0">
+              <input
+                type="number"
+                min={0}
+                max={24}
+                value={quickFillHours}
+                onChange={(e) => setQuickFillHours(Number(e.target.value))}
+                className="w-8 bg-transparent outline-none text-[#1c2126] text-[13px] font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-[#1c2126] text-[13px] font-semibold">год</span>
+            </div>
+            <button
+              type="button"
+              onClick={applyQuickFill}
+              disabled={selectedCount === 0}
+              className="flex-1 bg-[#21ba6b] max-w-[180px] h-11 flex items-center justify-center rounded-lg text-white text-sm font-semibold disabled:opacity-40"
+            >
+              Застосувати (обрано {selectedCount})
+            </button>
+          </div>
+        </div>
+
+        {/* Quick fill panel — desktop: full descriptive version */}
+        <div className="hidden md:flex bg-[#f2fcf5] border border-[#e5f7eb] gap-3 items-center px-4 py-3.5 rounded-xl">
           <div className="bg-[#21ba6b] flex items-center justify-center rounded-lg shrink-0 size-9">
             <span className="text-white text-sm">⚡</span>
           </div>
@@ -268,36 +319,42 @@ const WorkDaysForm = () => {
             type="button"
             onClick={applyQuickFill}
             disabled={selectedCount === 0}
-            className="bg-[#21ba6b] flex h-10 items-center justify-center px-4.5 rounded-lg text-white text-[13px] font-semibold whitespace-nowrap disabled:opacity-40"
+            className="bg-[#21ba6b] flex h-10 items-center justify-center px-4 rounded-lg text-white text-[13px] font-semibold whitespace-nowrap disabled:opacity-40"
           >
             Застосувати до обраних
           </button>
         </div>
 
+        {/* Mobile: short scroll hint instead of the copy-day legend */}
+        <p className="md:hidden text-[11px] text-[#737a85] text-center">
+          Прокрутіть вниз, щоб побачити решту днів місяця
+        </p>
+
         <h2 className="text-[#1c2126] text-sm font-semibold">Дні місяця</h2>
 
-        {/* Day grid */}
-        <div className="flex gap-6 items-start">
+        {/* Day grid: single column on mobile, two columns from md */}
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-start">
           {columns.map((col, i) => (
-            <div key={i} className="flex flex-col gap-1 flex-1">
+            <div key={i} className="flex flex-col gap-1 flex-1 w-full">
               {col.map(renderDayRow)}
             </div>
           ))}
         </div>
 
-        <div className="flex gap-2 items-center text-[#737a85]">
+        {/* Desktop: full copy-day legend */}
+        <div className="hidden md:flex gap-2 items-center text-[#737a85]">
           <span className="text-xs">⧉</span>
           <span className="text-[11px]">
             — скопіювати години цього дня на наступний день. Позначте кілька днів чекбоксом, щоб задати години масово через панель вище.
           </span>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-7 justify-end">
+        {/* Actions: equal-width side-by-side buttons on mobile, fixed-width row on desktop */}
+        <div className="flex flex-row gap-2.5 md:gap-7 md:justify-end">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="bg-white border border-[#e5e8ed] h-11 flex items-center justify-center rounded-[10px] w-[140px] text-[#737a85] text-sm font-semibold"
+            className="flex-1 md:flex-none bg-white border border-[#e5e8ed] h-11 flex items-center justify-center rounded-[10px] md:w-[140px] text-[#737a85] text-sm font-semibold"
           >
             Скасувати
           </button>
@@ -305,7 +362,7 @@ const WorkDaysForm = () => {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="bg-[#21ba6b] h-11 flex items-center justify-center rounded-[10px] w-[140px] text-white text-sm font-semibold disabled:opacity-60"
+            className="flex-1 md:flex-none bg-[#21ba6b] h-11 flex items-center justify-center rounded-[10px] md:w-[140px] text-white text-sm font-semibold disabled:opacity-60"
           >
             {saving ? 'Збереження...' : 'Зберегти'}
           </button>
