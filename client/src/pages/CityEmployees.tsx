@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { getCityEmployees, createEmployee, deleteEmployee, getCities } from '../api';
 import { Employee, City } from '../types';
 import MoveEmployeeModal from '../components/MoveEmployeeModal';
@@ -20,6 +21,7 @@ const CityEmployees = () => {
   });
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null); 
 
   useEffect(() => {
     loadEmployees();
@@ -28,7 +30,10 @@ const CityEmployees = () => {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideDesktop = menuRef.current?.contains(target);
+      const insideMobile = mobileMenuRef.current?.contains(target);
+      if (!insideDesktop && !insideMobile) {
         setOpenMenuId(null);
       }
     };
@@ -104,33 +109,44 @@ const CityEmployees = () => {
   }
 
   return (
-    <div className="p-6 md:p-10 bg-[#fafafb] min-h-screen">
+    <div className="p-4 md:p-10 bg-[#fafafb] min-h-screen">
       <div className="max-w-6xl mx-auto">
-        {/* Breadcrumb */}
-        <div className="text-xs text-gray-400 mb-2">
+        {/* Mobile header */}
+        <div className="flex items-center gap-2 mb-1 md:hidden">
+          <button onClick={() => navigate(-1)} className="text-gray-700 -ml-1 p-1.5">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg font-bold text-gray-900 truncate">
+            {currentCity?.name ?? ''}
+          </h1>
+        </div>
+        <p className="text-sm text-gray-400 mb-4 md:hidden">
+          {employees.length} працівників
+        </p>
+
+        {/* Desktop breadcrumb + header */}
+        <div className="hidden md:block text-xs text-gray-400 mb-2">
           <button onClick={() => navigate('/')} className="hover:text-gray-600">
             Міста
           </button>
           {currentCity && <span> / {currentCity.name}</span>}
         </div>
-
-        {/* Header */}
-        <div className="mb-6">
+        <div className="hidden md:block mb-6">
           <h1 className="text-[26px] font-bold text-gray-900">
             Працівники міста {currentCity?.name ?? ''}
           </h1>
           <p className="text-sm text-gray-500 mt-1">{employees.length} працівників</p>
         </div>
 
-        {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        {/* Toolbar: search on top, button below on mobile (thanks to flex-col-reverse) */}
+        <div className="flex flex-col-reverse sm:flex-row gap-3 mb-6">
           <button
             onClick={() => setIsAdding(true)}
-            className="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold whitespace-nowrap"
+            className="bg-primary text-white w-full sm:w-auto px-5 py-2.5 rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold whitespace-nowrap"
           >
             + Додати працівника
           </button>
-          <div className="relative flex-1 max-w-xs">
+          <div className="relative flex-1 sm:max-w-xs">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
               🔍
             </span>
@@ -184,11 +200,10 @@ const CityEmployees = () => {
           </div>
         )}
 
-        {/* Employees Table */}
+        {/* Desktop table */}
         {filteredEmployees.length > 0 && (
-          <div className="bg-white rounded-2xl pb-20 border border-gray-200 overflow-hidden">
-            {/* Header row (desktop only) */}
-            <div className="hidden md:flex items-center px-6 py-3 bg-[#fafafb] border-b border-gray-200 text-xs font-semibold text-gray-400">
+          <div className="hidden md:block bg-white rounded-2xl pb-20 border border-gray-200 overflow-hidden">
+            <div className="flex items-center px-6 py-3 bg-[#fafafb] border-b border-gray-200 text-xs font-semibold text-gray-400">
               <div className="flex-1">Працівник</div>
               <div className="w-40">Дата народження</div>
               <div className="w-40">Додано</div>
@@ -200,7 +215,7 @@ const CityEmployees = () => {
               return (
                 <div
                   key={employee._id}
-                  className="flex flex-col md:flex-row md:items-center gap-3 md:gap-0 px-6 py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60 transition-colors"
+                  className="flex items-center px-6 py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/60 transition-colors"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -218,17 +233,20 @@ const CityEmployees = () => {
                     </button>
                   </div>
 
-                  <div className="md:w-40 text-sm text-gray-500 pl-[52px] md:pl-0">
+                  <div className="w-40 text-sm text-gray-500">
                     {employee.birthDate
                       ? new Date(employee.birthDate).toLocaleDateString('uk-UA')
                       : '—'}
                   </div>
 
-                  <div className="md:w-40 text-sm text-gray-500 pl-[52px] md:pl-0">
+                  <div className="w-40 text-sm text-gray-500">
                     {addedAt ? new Date(addedAt).toLocaleDateString('uk-UA') : '—'}
                   </div>
 
-                  <div className="relative md:w-10 flex justify-start md:justify-end pl-[52px] md:pl-0" ref={openMenuId === employee._id ? menuRef : null}>
+                  <div
+                    className="relative w-10 flex justify-end"
+                    ref={openMenuId === employee._id ? menuRef : null}
+                  >
                     <button
                       onClick={() => setOpenMenuId(openMenuId === employee._id ? null : employee._id)}
                       className="text-gray-400 hover:text-gray-600 px-1 text-lg leading-none"
@@ -238,7 +256,7 @@ const CityEmployees = () => {
                     </button>
 
                     {openMenuId === employee._id && (
-                      <div className="absolute right-0 md:right-0 top-6 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10">
+                      <div className="absolute right-0 top-6 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10">
                         <button
                           onClick={() => {
                             setOpenMenuId(null);
@@ -269,6 +287,85 @@ const CityEmployees = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Mobile card list */}
+        {filteredEmployees.length > 0 && (
+          <div className="md:hidden space-y-3 pb-4">
+            {filteredEmployees.map((employee) => (
+              <div
+                key={employee._id}
+                className="relative flex items-center gap-3 bg-white rounded-2xl border border-gray-200 p-3"
+              >
+                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  <PhotoUpload
+                    employeeId={employee._id}
+                    currentPhotoUrl={employee.photoUrl}
+                    onPhotoUpdated={() => loadEmployees()}
+                  />
+                </div>
+
+                <button
+                  onClick={() => navigate(`/employees/${employee._id}/timesheet`)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="text-sm font-semibold text-gray-900 truncate">
+                    {employee.fullName}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {employee.birthDate
+                      ? new Date(employee.birthDate).toLocaleDateString('uk-UA')
+                      : '—'}
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setOpenMenuId(openMenuId === employee._id ? null : employee._id)}
+                  className="text-gray-300 px-1 shrink-0 text-lg leading-none"
+                  aria-label="Опції працівника"
+                >
+                  •••
+                </button>
+
+                <ChevronRight
+                  onClick={() => navigate(`/employees/${employee._id}/timesheet`)}
+                  className="w-4 h-4 text-gray-300 shrink-0 cursor-pointer"
+                />
+
+                {openMenuId === employee._id && (
+                  <div
+                    ref={mobileMenuRef}
+                    className="absolute right-3 top-12 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10"
+                  >
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        navigate(`/employees/${employee._id}/timesheet`);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Робочі дні
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        setMoveEmployee(employee);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Перемістити
+                    </button>
+                    <button
+                      onClick={() => handleDeleteEmployee(employee._id)}
+                      className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50"
+                    >
+                      Видалити
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
