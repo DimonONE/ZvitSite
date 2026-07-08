@@ -1,0 +1,35 @@
+@media print {
+  /* Ховаємо все крім основного контенту */
+  aside,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  /* Альбомна орієнтація */
+  @page {
+    size: A4 landscape;
+    margin: 1cm;
+  }
+
+  /* Оптимізація для друку */
+  .print-container {
+    width: 100%;
+    max-width: none;
+  }
+
+  /* Стилі для таблиці днів */
+  .print-day-row {
+    page-break-inside: avoid;
+    border: 1px solid #000;
+    padding: 8px;
+  }
+
+  /* Зберігаємо кольори вихідних при друку */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}

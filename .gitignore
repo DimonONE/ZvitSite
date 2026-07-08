@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+uploads
+*.log
+.DS_Store
+
+CC.bat
+figma_design.json
+ruvector.db
+TZ_timesheet_app.md
