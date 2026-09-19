@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getTimesheet, updateTimesheet, getCities, getEmployee } from '../api';
 import { Timesheet, City, Employee } from '../types';
+import TimesheetPhotoImport from '../components/TimesheetPhotoImport';
 
 interface DayEntry {
   day: number;
@@ -95,6 +96,12 @@ const WorkDaysForm = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePhotoImported = () => {
+    // Дані вже збережені в MongoDB на бекенді — просто перезавантажуємо форму,
+    // щоб побачити розпізнані години.
+    loadData();
   };
 
   const selectedCount = useMemo(() => days.filter((d) => d.selected).length, [days]);
@@ -354,6 +361,15 @@ const WorkDaysForm = () => {
         <p className="md:hidden text-[11px] text-[#737a85] text-center">
           Прокрутіть вниз, щоб побачити решту днів місяця
         </p>
+
+        {employeeId && (
+          <TimesheetPhotoImport
+            employeeId={employeeId}
+            year={year}
+            month={month}
+            onImported={handlePhotoImported}
+          />
+        )}
 
         <h2 className="text-[#1c2126] text-sm font-semibold">Дні місяця</h2>
 

@@ -35,3 +35,12 @@ export const updateTimesheet = (employeeId: string, year: number, month: number,
   api.put<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`, data);
 export const exportTimesheet = (employeeId: string, year: number, month: number) =>
   api.get(`/employees/${employeeId}/timesheets/${year}/${month}/export`, { responseType: 'blob' });
+export const importTimesheetPhoto = (employeeId: string, year: number, month: number, file: File) => {
+  const formData = new FormData();
+  formData.append('photo', file);
+  return api.post<Timesheet>(
+    `/employees/${employeeId}/timesheets/${year}/${month}/import-photo`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  );
+};
