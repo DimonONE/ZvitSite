@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import CityEmployees from './pages/CityEmployees';
 import EmployeeTimesheet from './pages/EmployeeTimesheet';
 import EmployeeInfo from './pages/EmployeeInfo';
+import Export from './pages/Export';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/cities/:cityId/employees" element={<CityEmployees />} />
           <Route path="/employees/:employeeId/timesheet" element={<EmployeeTimesheet />} />
           <Route path="/employees/:employeeId" element={<EmployeeInfo />} />
+          <Route path="/export" element={<Export />} />
         </Routes>
       </main>
       <MobileBottomNav />
