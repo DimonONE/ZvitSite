@@ -2,7 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import { getCityEmployees } from '../controllers/employeeController';
 import { getTimesheet, updateTimesheet, importTimesheetPhoto } from '../controllers/timesheetController';
-import { exportTimesheetToExcel } from '../controllers/exportController';
+import { exportTimesheetToExcel, exportCityMonthToExcel } from '../controllers/exportController';
+import { importCitySheetPhoto } from '../controllers/citySheetController';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ const photoUpload = multer({
 });
 
 router.get('/:cityId/employees', getCityEmployees);
+router.get('/:cityId/city-timesheet/:year/:month/export', exportCityMonthToExcel);
 router.get('/:employeeId/timesheets/:year/:month', getTimesheet);
 router.put('/:employeeId/timesheets/:year/:month', updateTimesheet);
 router.get('/:employeeId/timesheets/:year/:month/export', exportTimesheetToExcel);
@@ -30,5 +32,6 @@ router.post(
   photoUpload.single('photo'),
   importTimesheetPhoto
 );
+router.post('/import-city-sheet-photo', photoUpload.single('photo'), importCitySheetPhoto);
 
 export default router;

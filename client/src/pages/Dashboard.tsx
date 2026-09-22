@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCities, createCity, deleteCity } from '../api';
 import { City } from '../types';
+import QuickPhotoImportModal from '../components/QuickPhotoImportModal';
 
 // Cycle of accent colors for city icons, matching the design's varied palette
 const ICON_COLORS = [
@@ -30,6 +31,7 @@ const Dashboard = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,10 +98,26 @@ const Dashboard = () => {
     <div className="p-6 md:p-10 bg-[#fafafb] min-h-screen">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-[26px] font-bold text-gray-900">Мої міста</h1>
-          <p className="text-sm text-gray-500 mt-1">Огляд категорій міст та працівників</p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-[26px] font-bold text-gray-900">Мої міста</h1>
+            <p className="text-sm text-gray-500 mt-1">Огляд категорій міст та працівників</p>
+          </div>
+          <button
+            onClick={() => setPhotoModalOpen(true)}
+            className="bg-[#21ba6b] text-white px-5 py-2.5 rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold flex items-center justify-center gap-2 shrink-0"
+          >
+            📷 Завантажити фото табеля
+          </button>
         </div>
+
+        {photoModalOpen && (
+          <QuickPhotoImportModal
+            cities={cities}
+            onClose={() => setPhotoModalOpen(false)}
+            onDataChanged={loadCities}
+          />
+        )}
 
         {/* Add City inline form */}
         {isAdding && (

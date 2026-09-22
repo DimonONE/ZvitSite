@@ -5,11 +5,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { path: '/', label: 'Дашборд' },
-    { path: '/employees', label: 'Працівники' },
-    { path: '/cities', label: 'Міста' },
-    { path: '/calendar', label: 'Календар' },
     { path: '/export', label: 'Експорт' },
-    { path: '/settings', label: 'Налаштування' },
   ];
 
   return (

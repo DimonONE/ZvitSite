@@ -44,3 +44,31 @@ export const importTimesheetPhoto = (employeeId: string, year: number, month: nu
     { headers: { 'Content-Type': 'multipart/form-data' } }
   );
 };
+
+export interface CitySheetImportResult {
+  year: number;
+  month: number;
+  detectedCityName: string | null;
+  resolvedCity: { _id: string; name: string } | null;
+  matched: Array<{ employeeId: string; employeeName: string; totalHours: number }>;
+  unmatched: Array<{ recognizedName: string; hours: (number | null)[] }>;
+}
+
+// Завантаження фото зведеного табеля по місту (без вибору працівника —
+// AI сам розпізнає всіх зі знімку і зіставляє з базою).
+export const importCitySheetPhoto = (
+  file: File,
+  options?: { cityId?: string; year?: number; month?: number }
+) => {
+  const formData = new FormData();
+  formData.append('photo', file);
+  if (options?.cityId) formData.append('cityId', options.cityId);
+  if (options?.year) formData.append('year', String(options.year));
+  if (options?.month) formData.append('month', String(options.month));
+  return api.post<CitySheetImportResult>('/cities/import-city-sheet-photo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const exportCityMonth = (cityId: string, year: number, month: number) =>
+  api.get(`/cities/${cityId}/city-timesheet/${year}/${month}/export`, { responseType: 'blob' });
