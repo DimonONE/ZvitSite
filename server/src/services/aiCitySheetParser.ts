@@ -1,14 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 
-let anthropicClient: Anthropic | null = null;
-const getAnthropicClient = () => {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let geminiClient: GoogleGenAI | null = null;
+const getGeminiClient = () => {
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
-  return anthropicClient;
+  return geminiClient;
 };
 
-const MODEL = 'claude-sonnet-5';
+// gemini-3.5-flash-lite має найщедріший безкоштовний ліміт (сотні запитів
+// на добу) — для "пари фото на день" вистачає з великим запасом.
+const MODEL = 'gemini-3.5-flash-lite';
 
 export interface ParsedCitySheetEmployee {
   name: string;
@@ -61,34 +63,34 @@ export const parseCitySheetPhoto = async (
 - Розпізнай КОЖНОГО працівника з таблиці, збережи порядок рядків як у документі.
 - Не вигадуй працівників чи значення — якщо клітинка нерозбірлива, став null.`;
 
-  const response = await getAnthropicClient().messages.create({
+  const response = await getGeminiClient().models.generateContent({
     model: MODEL,
-    max_tokens: 4000,
-    system: systemPrompt,
-    messages: [
+    contents: [
       {
         role: 'user',
-        content: [
+        parts: [
+          { text: 'Розпізнай цей табель за інструкцією.' },
           {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            inlineData: {
+              mimeType: mimeType,
               data: base64Image,
             },
           },
-          { type: 'text', text: 'Розпізнай цей табель за інструкцією.' },
         ],
       },
     ],
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+    },
   });
 
-  const textBlock = response.content.find((block) => block.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
+  const responseText = response.text;
+  if (!responseText) {
     throw new Error('AI did not return a text response');
   }
 
-  const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+  const cleaned = responseText.replace(/```json|```/g, '').trim();
 
   let raw: any;
   try {

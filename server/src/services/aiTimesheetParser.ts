@@ -1,17 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 import { DayStatus } from '../models/Timesheet';
 
-let anthropicClient: Anthropic | null = null;
-const getAnthropicClient = () => {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let geminiClient: GoogleGenAI | null = null;
+const getGeminiClient = () => {
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   }
-  return anthropicClient;
+  return geminiClient;
 };
 
-// Модель з підтримкою зображень. За потреби можна замінити на іншу
-// актуальну модель з https://docs.claude.com/en/docs/about-claude/models
-const MODEL = 'claude-sonnet-5';
+const MODEL = 'gemini-3.5-flash-lite';
 
 export interface ParsedDay {
   day: number;
@@ -52,35 +50,35 @@ export const parseTimesheetPhoto = async (
     ? `Розпізнай табель для працівника "${employeeFullName}" за ${month}/${year}.`
     : `Розпізнай табель за ${month}/${year}.`;
 
-  const response = await getAnthropicClient().messages.create({
+  const response = await getGeminiClient().models.generateContent({
     model: MODEL,
-    max_tokens: 2000,
-    system: systemPrompt,
-    messages: [
+    contents: [
       {
         role: 'user',
-        content: [
+        parts: [
+          { text: userText },
           {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            inlineData: {
+              mimeType: mimeType,
               data: base64Image,
             },
           },
-          { type: 'text', text: userText },
         ],
       },
     ],
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+    },
   });
 
-  const textBlock = response.content.find((block) => block.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
+  const responseText = response.text;
+  if (!responseText) {
     throw new Error('AI did not return a text response');
   }
 
-  // Модель іноді огортає JSON у ```json ... ``` попри інструкцію — прибираємо про всяк випадок
-  const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+  // Про всяк випадок прибираємо можливе огортання в ```json ... ```
+  const cleaned = responseText.replace(/```json|```/g, '').trim();
 
   let raw: unknown;
   try {
