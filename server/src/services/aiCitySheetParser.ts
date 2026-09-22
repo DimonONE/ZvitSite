@@ -1,8 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+let anthropicClient: Anthropic | null = null;
+const getAnthropicClient = () => {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
+};
 
 const MODEL = 'claude-sonnet-5';
 
@@ -57,7 +61,7 @@ export const parseCitySheetPhoto = async (
 - Розпізнай КОЖНОГО працівника з таблиці, збережи порядок рядків як у документі.
 - Не вигадуй працівників чи значення — якщо клітинка нерозбірлива, став null.`;
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: 4000,
     system: systemPrompt,

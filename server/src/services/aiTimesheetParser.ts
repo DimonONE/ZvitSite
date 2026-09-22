@@ -1,9 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { DayStatus } from '../models/Timesheet';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+let anthropicClient: Anthropic | null = null;
+const getAnthropicClient = () => {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return anthropicClient;
+};
 
 // Модель з підтримкою зображень. За потреби можна замінити на іншу
 // актуальну модель з https://docs.claude.com/en/docs/about-claude/models
@@ -48,7 +52,7 @@ export const parseTimesheetPhoto = async (
     ? `Розпізнай табель для працівника "${employeeFullName}" за ${month}/${year}.`
     : `Розпізнай табель за ${month}/${year}.`;
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropicClient().messages.create({
     model: MODEL,
     max_tokens: 2000,
     system: systemPrompt,
