@@ -45,18 +45,46 @@ export const importTimesheetPhoto = (employeeId: string, year: number, month: nu
   );
 };
 
-export interface CitySheetImportResult {
-  year: number;
-  month: number;
-  detectedCityName: string | null;
-  resolvedCity: { _id: string; name: string } | null;
-  matched: Array<{ employeeId: string; employeeName: string; totalHours: number }>;
-  unmatched: Array<{ recognizedName: string; hours: (number | null)[] }>;
+export interface CitySheetRow {
+  recognizedName: string;
+  hours: (number | null)[];
+  totalHours: number;
+  matchedEmployeeId: string | null;
+  matchedEmployeeName: string | null;
 }
 
-// Завантаження фото зведеного табеля по місту (без вибору працівника —
-// AI сам розпізнає всіх зі знімку і зіставляє з базою).
-export const importCitySheetPhoto = (
+export interface CitySheetPreviewResult {
+  year: number;
+  month: number;
+  totalDays: number;
+  detectedCityName: string | null;
+  resolvedCity: { _id: string; name: string } | null;
+  rows: CitySheetRow[];
+}
+
+export interface CitySheetConfirmRow {
+  recognizedName: string;
+  hours: (number | null)[];
+  // employeeId: прив'язати до існуючого працівника; відсутнє/null — створити нового
+  employeeId?: string | null;
+  // skip: не імпортувати цей рядок узагалі
+  skip?: boolean;
+}
+
+export interface CitySheetConfirmResult {
+  year: number;
+  month: number;
+  cityId: string;
+  cityName: string;
+  cityCreated: boolean;
+  saved: Array<{ employeeId: string; employeeName: string; totalHours: number; created: boolean }>;
+  skipped: number;
+}
+
+// Крок 1 — тільки розпізнати фото зведеного табеля по місту і повернути
+// прев'ю (точно в тому вигляді, в якому воно піде в базу/Excel). У базу
+// НІЧОГО не пишеться, поки користувач не підтвердить прев'ю (див. нижче).
+export const previewCitySheetPhoto = (
   file: File,
   options?: { cityId?: string; year?: number; month?: number }
 ) => {
@@ -65,10 +93,21 @@ export const importCitySheetPhoto = (
   if (options?.cityId) formData.append('cityId', options.cityId);
   if (options?.year) formData.append('year', String(options.year));
   if (options?.month) formData.append('month', String(options.month));
-  return api.post<CitySheetImportResult>('/cities/import-city-sheet-photo', formData, {
+  return api.post<CitySheetPreviewResult>('/cities/import-city-sheet-photo', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+
+// Крок 2 — користувач підтвердив прев'ю: тільки тепер створюємо
+// працівників, яких не було в базі, і зберігаємо табель за місяць.
+export const confirmCitySheetImport = (data: {
+  year: number;
+  month: number;
+  // Передайте ОДНЕ з двох: cityId (існуюче місце) або newCityName (створити нове).
+  cityId?: string | null;
+  newCityName?: string | null;
+  rows: CitySheetConfirmRow[];
+}) => api.post<CitySheetConfirmResult>('/cities/import-city-sheet-photo/confirm', data);
 
 export const exportCityMonth = (cityId: string, year: number, month: number) =>
   api.get(`/cities/${cityId}/city-timesheet/${year}/${month}/export`, { responseType: 'blob' });

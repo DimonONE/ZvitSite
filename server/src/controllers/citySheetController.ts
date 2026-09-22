@@ -4,28 +4,14 @@ import City from '../models/City';
 import Timesheet from '../models/Timesheet';
 import { generateTimesheetDays } from '../utils/timesheetUtils';
 import { parseCitySheetPhoto } from '../services/aiCitySheetParser';
+import { namesLooselyMatch, findBestNameMatch } from '../utils/nameMatch';
 
-// Нормалізує ім'я для порівняння: нижній регістр, без зайвих пробілів,
-// без крапок (скорочення на кшталт "Markovyc Tol." vs "Markovyc Tolik").
-const normalizeName = (name: string) =>
-  name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
-
-const namesLooselyMatch = (a: string, b: string): boolean => {
-  const na = normalizeName(a);
-  const nb = normalizeName(b);
-  if (na === nb) return true;
-
-  const wordsA = na.split(' ').filter(Boolean);
-  const wordsB = nb.split(' ').filter(Boolean);
-  if (wordsA.length === 0 || wordsB.length === 0) return false;
-
-  // Кожне слово з коротшого імені має бути префіксом якогось слова в довшому
-  // (покриває скорочення на кшталт "Tol." <-> "Tolik", "І." <-> "Іван").
-  const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA];
-  return shorter.every((w) => longer.some((lw) => lw.startsWith(w) || w.startsWith(lw)));
-};
-
-export const importCitySheetPhoto = async (req: Request, res: Response) => {
+// ---- КРОК 1: preview -----------------------------------------------------
+// Розпізнає фото і повертає таблицю "як буде імпортовано" (точно в тому
+// вигляді, в якому вона піде в Excel). Нічого НЕ пише в базу — це чисто
+// прев'ю, щоб користувач міг перевірити правильність розпізнавання перед
+// збереженням.
+export const previewCitySheetPhoto = async (req: Request, res: Response) => {
   try {
     const file = req.file;
     if (!file) {
@@ -51,26 +37,139 @@ export const importCitySheetPhoto = async (req: Request, res: Response) => {
       });
     }
 
-    // Пошук працівників: якщо клієнт передав cityId — шукаємо тільки в
-    // цьому місті (щоб не плутати однофамільців), інакше по всій базі.
-    const employeeQuery = fallbackCityId ? { cityId: fallbackCityId } : {};
+    // Визначаємо місто: явно передане клієнтом, або те, що розпізнав AI
+    // з шапки фото.
+    let resolvedCity: { _id: string; name: string } | null = null;
+    if (fallbackCityId) {
+      const c = await City.findById(fallbackCityId);
+      if (c) resolvedCity = { _id: String(c._id), name: c.name };
+    } else if (parsed.cityName) {
+      const cities = await City.find();
+      // Фотографія майже ніколи не розпізнається побуквенно точно (діакритика,
+      // пробіли, окремі букви в адресі), тож шукаємо найбільш схожу назву,
+      // а не вимагаємо ідентичного тексту.
+      const match = findBestNameMatch(cities, parsed.cityName, (c) => c.name);
+      if (match) resolvedCity = { _id: String(match._id), name: match.name };
+    }
+
+    // Шукаємо існуючих працівників лише для того, щоб ПІДКАЗАТИ збіги у
+    // прев'ю — нічого при цьому не змінюємо і не створюємо.
+    const employeeQuery = resolvedCity ? { cityId: resolvedCity._id } : {};
     const allEmployees = await Employee.find(employeeQuery);
 
-    const baseDays = generateTimesheetDays(year, month);
-
-    const matched: Array<{ employeeId: string; employeeName: string; totalHours: number }> = [];
-    const unmatched: Array<{ recognizedName: string; hours: (number | null)[] }> = [];
-
-    for (const recognized of parsed.employees) {
+    const rows = parsed.employees.map((recognized) => {
       const employee = allEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name));
+      const totalHours = recognized.hours.reduce((sum: number, h) => sum + (h ?? 0), 0);
+      return {
+        recognizedName: recognized.name,
+        hours: recognized.hours,
+        totalHours,
+        matchedEmployeeId: employee ? String(employee._id) : null,
+        matchedEmployeeName: employee ? employee.fullName : null,
+      };
+    });
 
-      if (!employee) {
-        unmatched.push({ recognizedName: recognized.name, hours: recognized.hours });
+    res.json({
+      year,
+      month,
+      totalDays: rows[0]?.hours.length ?? new Date(year, month, 0).getDate(),
+      detectedCityName: parsed.cityName,
+      resolvedCity,
+      rows,
+    });
+  } catch (error) {
+    console.error('Failed to preview city sheet photo:', error);
+    res.status(500).json({
+      error: 'Failed to recognize timesheet sheet photo',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+// ---- КРОК 2: confirm -------------------------------------------------------
+// Викликається лише після того, як користувач підтвердив прев'ю (побачив
+// точну таблицю і натиснув "Зберегти"). Тут і тільки тут:
+//   - створюємо працівників, яких ще немає в базі (по обраному місту);
+//   - записуємо/оновлюємо табель за відповідний місяць.
+interface ConfirmRow {
+  recognizedName: string;
+  hours: (number | null)[];
+  employeeId?: string | null;
+  skip?: boolean;
+}
+
+export const confirmCitySheetImport = async (req: Request, res: Response) => {
+  try {
+    const { year, month, cityId, newCityName, rows } = req.body as {
+      year: number;
+      month: number;
+      cityId?: string | null;
+      newCityName?: string | null;
+      rows: ConfirmRow[];
+    };
+
+    if (!year || !month) {
+      return res.status(400).json({ error: 'year and month are required' });
+    }
+    if (!cityId && !newCityName?.trim()) {
+      return res.status(400).json({ error: 'cityId or newCityName is required' });
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'rows is required and must be a non-empty array' });
+    }
+
+    let city;
+    let cityCreated = false;
+    if (cityId) {
+      city = await City.findById(cityId);
+      if (!city) {
+        return res.status(404).json({ error: 'City not found' });
+      }
+    } else {
+      const trimmedName = newCityName!.trim();
+      // На випадок, якщо місце з такою (чи дуже схожою) назвою вже встигли
+      // створити — не плодимо дублікати, а використовуємо існуюче.
+      const existingCities = await City.find();
+      const existing = existingCities.find((c) => namesLooselyMatch(c.name, trimmedName));
+      if (existing) {
+        city = existing;
+      } else {
+        // Місця з такою назвою ще немає в базі — це новий об'єкт/місто.
+        // Створюємо його ТІЛЬКИ зараз, після підтвердження користувачем.
+        city = await City.create({ name: trimmedName });
+        cityCreated = true;
+      }
+    }
+
+    const baseDays = generateTimesheetDays(year, month);
+    const saved: Array<{ employeeId: string; employeeName: string; totalHours: number; created: boolean }> = [];
+    let skipped = 0;
+
+    for (const row of rows) {
+      if (row.skip) {
+        skipped++;
         continue;
       }
 
+      const name = (row.recognizedName || '').trim();
+      if (!name) {
+        skipped++;
+        continue;
+      }
+
+      let employee = row.employeeId ? await Employee.findById(row.employeeId) : null;
+      let created = false;
+
+      // Користувач підтвердив, що це новий працівник (нема прив'язки до
+      // існуючого) — тільки тепер, після підтвердження, його реально
+      // створюємо в базі.
+      if (!employee) {
+        employee = await Employee.create({ fullName: name, cityId: city._id });
+        created = true;
+      }
+
       const mergedDays = baseDays.map((base, idx) => {
-        const hours = recognized.hours[idx] ?? null;
+        const hours = row.hours?.[idx] ?? null;
         return {
           day: base.day,
           hours,
@@ -85,34 +184,27 @@ export const importCitySheetPhoto = async (req: Request, res: Response) => {
       );
 
       const totalHours = mergedDays.reduce((sum, d) => sum + (d.hours ?? 0), 0);
-      matched.push({ employeeId: String(employee._id), employeeName: employee.fullName, totalHours });
-    }
-
-    // Якщо AI розпізнав назву міста і клієнт її не задав — спробуємо знайти
-    // відповідне місто, щоб одразу підказати на фронті, куди прив'язувати
-    // незнайдених працівників.
-    let resolvedCity: { _id: string; name: string } | null = null;
-    if (fallbackCityId) {
-      const c = await City.findById(fallbackCityId);
-      if (c) resolvedCity = { _id: String(c._id), name: c.name };
-    } else if (parsed.cityName) {
-      const cities = await City.find();
-      const match = cities.find((c) => normalizeName(c.name) === normalizeName(parsed.cityName!));
-      if (match) resolvedCity = { _id: String(match._id), name: match.name };
+      saved.push({
+        employeeId: String(employee._id),
+        employeeName: employee.fullName,
+        totalHours,
+        created,
+      });
     }
 
     res.json({
       year,
       month,
-      detectedCityName: parsed.cityName,
-      resolvedCity,
-      matched,
-      unmatched,
+      cityId: String(city._id),
+      cityName: city.name,
+      cityCreated,
+      saved,
+      skipped,
     });
   } catch (error) {
-    console.error('Failed to import city sheet photo:', error);
+    console.error('Failed to confirm city sheet import:', error);
     res.status(500).json({
-      error: 'Failed to recognize timesheet sheet photo',
+      error: 'Failed to save timesheet sheet import',
       details: error instanceof Error ? error.message : String(error),
     });
   }

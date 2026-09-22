@@ -3,7 +3,7 @@ import multer from 'multer';
 import { getCityEmployees } from '../controllers/employeeController';
 import { getTimesheet, updateTimesheet, importTimesheetPhoto } from '../controllers/timesheetController';
 import { exportTimesheetToExcel, exportCityMonthToExcel } from '../controllers/exportController';
-import { importCitySheetPhoto } from '../controllers/citySheetController';
+import { previewCitySheetPhoto, confirmCitySheetImport } from '../controllers/citySheetController';
 
 const router = Router();
 
@@ -32,6 +32,10 @@ router.post(
   photoUpload.single('photo'),
   importTimesheetPhoto
 );
-router.post('/import-city-sheet-photo', photoUpload.single('photo'), importCitySheetPhoto);
+// Крок 1: тільки розпізнати і показати прев'ю — нічого не пишемо в базу.
+router.post('/import-city-sheet-photo', photoUpload.single('photo'), previewCitySheetPhoto);
+// Крок 2: користувач підтвердив прев'ю — тільки тепер створюємо
+// працівників, яких не було в базі, і зберігаємо табель.
+router.post('/import-city-sheet-photo/confirm', confirmCitySheetImport);
 
 export default router;
