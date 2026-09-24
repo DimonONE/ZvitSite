@@ -5,6 +5,7 @@ import Employee from '../models/Employee';
 import City from '../models/City';
 import { getDayName } from '../utils/timesheetUtils';
 import { buildCityMonth } from '../utils/cityTimesheet';
+import { buildCityMonthWorkbook } from '../utils/cityMonthWorkbook';
 
 export const exportTimesheetToExcel = async (req: Request, res: Response) => {
   try {
@@ -156,13 +157,17 @@ function getStatusLabelUk(status: string): string {
   return labels[status] || status;
 }
 
-// Точна відповідність референсному файлу: місто+дата в шапці, Jméno + дні
-// місяця + Hod. celkem, "x" для невідпрацьованих днів, формули SUM.
+// Зведений табель міста за місяць — Excel у вигляді еталонного зразка
+// (див. utils/cityMonthWorkbook.ts). Дані беруться з бази через buildCityMonth:
+// ті самі, що бачить сторінка «Експорт» у прев'ю.
 export const exportCityMonthToExcel = async (req: Request, res: Response) => {
   try {
     const { cityId, year, month } = req.params;
     const yearNum = parseInt(year);
     const monthNum = parseInt(month);
+    if (!yearNum || !monthNum || monthNum < 1 || monthNum > 12) {
+      return res.status(400).json({ error: 'Invalid year or month' });
+    }
 
     const city = await City.findById(cityId);
     if (!city) {
@@ -173,91 +178,23 @@ export const exportCityMonthToExcel = async (req: Request, res: Response) => {
     console.log(
       `[exportCityMonthToExcel] cityId=${cityId} city="${city.name}" year=${yearNum} month=${monthNum} rows=${rowsData.length}`
     );
-    const totalDays = new Date(yearNum, monthNum, 0).getDate();
-    const lastDayCol = 1 + totalDays; // колонка A = 1, дні йдуть з колонки B
-    const totalCol = lastDayCol + 1;
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('List1');
+    const workbook = buildCityMonthWorkbook(city.name, yearNum, monthNum, rowsData);
 
-    const baseFont = { bold: false, size: 16 };
-    const nameFont = { bold: false, size: 14 };
-
-    // Шапка: місто зліва, дата початку місяця справа (як у зразку: для 31
-    // дня це A1:N1 "місто" + порожня колонка O + P1:AF1 "дата").
-    const midCol = 1 + Math.floor(totalDays / 2); // напр. 16 для 31 дня
-    worksheet.mergeCells(1, 1, 1, midCol - 2);
-    const cityCell = worksheet.getCell(1, 1);
-    cityCell.value = `місto: ${city.name}`;
-    cityCell.font = baseFont;
-
-    worksheet.mergeCells(1, midCol, 1, lastDayCol);
-    const dateCell = worksheet.getCell(1, midCol);
-    dateCell.value = `nástup: 1.${monthNum.toString().padStart(2, '0')}.${yearNum} `;
-    dateCell.font = baseFont;
-
-    // Заголовки таблиці
-    worksheet.getCell(2, 1).value = 'Jméno';
-    worksheet.getCell(2, 1).font = baseFont;
-    for (let d = 1; d <= totalDays; d++) {
-      const cell = worksheet.getCell(2, 1 + d);
-      cell.value = `${d}.`;
-      cell.font = baseFont;
-    }
-    worksheet.getCell(2, totalCol).value = 'Hod. celkem';
-    worksheet.getCell(2, totalCol).font = baseFont;
-
-    // Рядок 3 — порожній розділювач (як у зразку)
-
-    let rowNum = 4;
-    const firstDataRow = rowNum;
-    for (const row of rowsData) {
-      const nameCell = worksheet.getCell(rowNum, 1);
-      nameCell.value = row.fullName;
-      nameCell.font = nameFont;
-
-      for (let d = 1; d <= totalDays; d++) {
-        const value = row.hours[d - 1];
-        const cell = worksheet.getCell(rowNum, 1 + d);
-        cell.value = value !== null && value !== undefined ? value : 'x';
-        cell.font = baseFont;
-      }
-
-      const totalCell = worksheet.getCell(rowNum, totalCol);
-      const startColLetter = worksheet.getColumn(2).letter;
-      const endColLetter = worksheet.getColumn(1 + totalDays).letter;
-      totalCell.value = { formula: `SUM(${startColLetter}${rowNum}:${endColLetter}${rowNum})` };
-      totalCell.font = baseFont;
-
-      rowNum++;
-    }
-    const lastDataRow = rowNum - 1;
-
-    // Порожній рядок + підсумковий рядок з загальною сумою (як у зразку)
-    rowNum++;
-    const grandTotalRow = rowNum;
-    const totalColLetter = worksheet.getColumn(totalCol).letter;
-    worksheet.getCell(grandTotalRow, totalCol).value = {
-      formula: `SUM(${totalColLetter}${firstDataRow}:${totalColLetter}${lastDataRow})`,
-    };
-    worksheet.getCell(grandTotalRow, totalCol).font = baseFont;
-
-    // Ширина колонок — як у зразку
-    worksheet.getColumn(1).width = 30.33;
-    for (let d = 1; d <= totalDays; d++) {
-      worksheet.getColumn(1 + d).width = 5.22;
-    }
-    worksheet.getColumn(totalCol).width = 12.33;
-
-    const fileName = `${city.name.replace(/\s+/g, '_')}__${monthNum
-      .toString()
-      .padStart(2, '0')}_${(yearNum % 100).toString().padStart(2, '0')}_.xlsx`;
+    const fileName = `${city.name.replace(/\s+/g, '_')}__${String(monthNum).padStart(2, '0')}_${String(
+      yearNum % 100
+    ).padStart(2, '0')}_.xlsx`;
 
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     );
-    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    // Назва міста може містити кирилицю — у «голому» filename= це кидає
+    // ERR_INVALID_CHAR і дає 500, тому filename* (RFC 5987) + ASCII-запасний варіант.
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="timesheet.xlsx"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
 
     await workbook.xlsx.write(res);
     res.end();

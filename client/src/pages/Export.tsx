@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getCities, getCityMonth } from '../api';
+import { getCities, exportCityMonth } from '../api';
 import { City } from '../types';
 import TimesheetPreview from '../components/TimesheetPreview';
-import { exportToExcel } from '../utils/excelExport';
 
 interface ExpandedState {
   [cityId: string]: boolean;
@@ -53,19 +52,21 @@ const Export = () => {
     window.print();
   };
 
+  // Файл будує сервер (ExcelJS) з бази для обраного міста і місяця/року —
+  // той самий, що показує прев'ю, у форматі еталонного зразка.
   const handleExport = async (cityId: string, cityName: string) => {
-    console.log('Export clicked for:', cityName);
     try {
-      // Години саме цього міста за обраний місяць (з сервера)
-      const response = await getCityMonth(cityId, currentYear, currentMonth);
-      const employeesWithHours = response.data.rows.map((r) => ({
-        fullName: r.fullName,
-        hours: r.hours,
-        totalHours: r.totalHours,
-      }));
-
-      // Експортуємо в Excel
-      exportToExcel(cityName, currentYear, currentMonth, employeesWithHours);
+      const response = await exportCityMonth(cityId, currentYear, currentMonth);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${cityName.replace(/\s+/g, '_')}__${String(currentMonth).padStart(2, '0')}_${String(
+        currentYear % 100
+      ).padStart(2, '0')}_.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to export:', error);
       alert('Помилка експорту');
