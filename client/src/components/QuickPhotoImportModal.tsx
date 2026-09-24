@@ -51,6 +51,7 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [cityEmployees, setCityEmployees] = useState<Employee[]>([]);
   const [saved, setSaved] = useState<CitySheetConfirmResult | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   // Якщо фото розпізналось як вже існуюче місце — підвантажуємо його
   // працівників, щоб можна було вручну прив'язати рядок до когось із них
@@ -82,6 +83,7 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
       const response = await previewCitySheetPhoto(file);
       const data = response.data;
       setPreview(data);
+      setDrafts({});
       // Місце береться автоматично з фото: якщо таке вже є в базі —
       // береться його точна назва з бази, інакше — те, що розпізналось.
       setCityName(data.resolvedCity?.name || data.detectedCityName || '');
@@ -311,8 +313,21 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
                       {row.hours.map((h, dIdx) => (
                         <td key={dIdx} className="p-0.5 border-b border-[#e5e8ed]">
                           <input
-                            value={h ?? ''}
-                            onChange={(e) => updateHour(rIdx, dIdx, e.target.value)}
+                            inputMode="decimal"
+                            value={drafts[`${rIdx}:${dIdx}`] ?? (h ?? '')}
+                            onChange={(e) => {
+                              const key = `${rIdx}:${dIdx}`;
+                              const text = e.target.value;
+                              setDrafts((prev) => ({ ...prev, [key]: text }));
+                              updateHour(rIdx, dIdx, text);
+                            }}
+                            onBlur={() => {
+                              const key = `${rIdx}:${dIdx}`;
+                              setDrafts((prev) => {
+                                const { [key]: _drop, ...rest } = prev;
+                                return rest;
+                              });
+                            }}
                             disabled={row.skip}
                             placeholder="x"
                             className="w-9 text-center bg-[#fafafc] border border-[#e5e8ed] rounded py-1 text-xs"

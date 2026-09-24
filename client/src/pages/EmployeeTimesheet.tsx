@@ -214,11 +214,13 @@ const WorkDaysForm = () => {
             <span className="flex items-center gap-1 text-[#1c2126] text-xs font-semibold">
               <input
                 type="number"
+                inputMode="decimal"
                 min={0}
                 max={24}
+                step={0.5}
                 value={entry.hours}
                 onChange={(e) => setHours(entry.day, e.target.value)}
-                className="w-6 text-right bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-9 text-right bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               год
             </span>
