@@ -22,6 +22,7 @@ interface EditableRow {
   recognizedName: string;
   hours: (number | null)[];
   totalHours: number;
+  photoTotal: number | null; // підсумок з фото — для звірки з сумою днів
   employeeId: string; // '' = буде створено нового працівника
   skip: boolean;
 }
@@ -89,6 +90,7 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
           recognizedName: r.recognizedName,
           hours: r.hours,
           totalHours: r.totalHours,
+          photoTotal: r.photoTotal ?? null,
           employeeId: r.matchedEmployeeId || '',
           skip: false,
         }))
@@ -174,6 +176,20 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
   const activeRowsCount = rows.filter((r) => !r.skip).length;
   const newEmployeesCount = rows.filter((r) => !r.skip && !r.employeeId).length;
 
+  // Звірка з підсумком на фото: якщо сума днів не збігається — якась клітинка
+  // розпізнана неправильно (найчастіше «x» замість годин).
+  const isMismatch = (r: EditableRow) =>
+    !r.skip && r.photoTotal !== null && Math.abs(r.photoTotal - r.totalHours) > 0.001;
+  const mismatchCount = rows.filter(isMismatch).length;
+
+  // Два рядки на одного працівника → другий перезапише перший.
+  const idCounts = new Map<string, number>();
+  rows.forEach((r) => {
+    if (!r.skip && r.employeeId) idCounts.set(r.employeeId, (idCounts.get(r.employeeId) || 0) + 1);
+  });
+  const isDuplicate = (r: EditableRow) => !r.skip && !!r.employeeId && (idCounts.get(r.employeeId) || 0) > 1;
+  const hasDuplicates = rows.some(isDuplicate);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
@@ -249,6 +265,20 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
               «Підтвердити і зберегти».
             </p>
 
+            {mismatchCount > 0 && (
+              <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800">
+                ⚠ У <strong>{mismatchCount}</strong> рядках сума днів не збігається з підсумком на фото
+                (підсвічено). Швидше за все, якісь клітинки розпізнано як «x» або з іншим числом.
+                У колонці «Всього» показано, що написано на фото, — знайдіть і виправте день.
+              </div>
+            )}
+            {hasDuplicates && (
+              <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-700">
+                ⛔ Два рядки прив'язані до одного працівника — другий перезаписав би години першого.
+                Змініть «Прив'язку» (наприклад, на «+ новий працівник») або пропустіть зайвий рядок.
+              </div>
+            )}
+
             <div className="overflow-x-auto border border-[#e5e8ed] rounded-lg">
               <table className="text-xs border-collapse w-full">
                 <thead>
@@ -265,8 +295,11 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, rIdx) => (
-                    <tr key={rIdx} className={row.skip ? 'opacity-40' : ''}>
+                  {rows.map((row, rIdx) => {
+                    const bad = isMismatch(row);
+                    const dup = isDuplicate(row);
+                    return (
+                    <tr key={rIdx} className={`${row.skip ? 'opacity-40' : ''} ${bad ? 'bg-amber-50' : ''}`}>
                       <td className="sticky left-0 bg-white p-1 border-b border-[#e5e8ed]">
                         <input
                           value={row.recognizedName}
@@ -286,13 +319,26 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
                           />
                         </td>
                       ))}
-                      <td className="p-1 border-b border-[#e5e8ed] text-center font-semibold">{row.totalHours}</td>
+                      <td
+                        className={`p-1 border-b border-[#e5e8ed] text-center font-semibold ${
+                          bad ? 'text-red-600' : ''
+                        }`}
+                      >
+                        {row.totalHours}
+                        {bad && (
+                          <div className="text-[10px] font-normal whitespace-nowrap">
+                            на фото: {row.photoTotal}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-1 border-b border-[#e5e8ed]">
                         <select
                           value={row.employeeId}
                           onChange={(e) => updateRow(rIdx, { employeeId: e.target.value })}
                           disabled={row.skip}
-                          className="w-full bg-[#fafafc] border border-[#e5e8ed] rounded px-1 py-1 text-[11px]"
+                          className={`w-full bg-[#fafafc] border rounded px-1 py-1 text-[11px] ${
+                            dup ? 'border-red-500' : 'border-[#e5e8ed]'
+                          }`}
                         >
                           <option value="">+ новий працівник</option>
                           {cityEmployees.map((e) => (
@@ -310,7 +356,8 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -335,7 +382,7 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
               </button>
               <button
                 onClick={handleConfirm}
-                disabled={!canConfirm || activeRowsCount === 0 || saving}
+                disabled={!canConfirm || activeRowsCount === 0 || saving || hasDuplicates}
                 className="flex-[2] bg-[#21ba6b] h-10 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
               >
                 {saving ? '⏳ Зберігаємо...' : '✓ Підтвердити і зберегти'}

@@ -69,6 +69,7 @@ export const previewCitySheetPhoto = async (req: Request, res: Response) => {
         recognizedName: recognized.name,
         hours: recognized.hours,
         totalHours,
+        photoTotal: recognized.total,
         matchedEmployeeId: employee ? String(employee._id) : null,
         matchedEmployeeName: employee ? employee.fullName : null,
       };
@@ -123,6 +124,20 @@ export const confirmCitySheetImport = async (req: Request, res: Response) => {
     }
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'rows is required and must be a non-empty array' });
+    }
+
+    // Два рядки, прив'язані до ОДНОГО працівника, — другий мовчки перезаписав би
+    // табель першого (втрата годин). Відхиляємо до будь-яких змін у базі.
+    const seenEmployeeIds = new Set<string>();
+    for (const r of rows) {
+      if (r.skip || !r.employeeId) continue;
+      if (seenEmployeeIds.has(String(r.employeeId))) {
+        return res.status(400).json({
+          error: 'Two rows are linked to the same employee',
+          employeeId: r.employeeId,
+        });
+      }
+      seenEmployeeIds.add(String(r.employeeId));
     }
 
     const trimmedName = cityName.trim();

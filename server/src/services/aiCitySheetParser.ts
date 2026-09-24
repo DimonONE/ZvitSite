@@ -10,12 +10,17 @@ const getGeminiClient = () => {
 
 // gemini-3.5-flash-lite має найщедріший безкоштовний ліміт (сотні запитів
 // на добу) — для "пари фото на день" вистачає з великим запасом.
-const MODEL = 'gemini-3.5-flash-lite';
+// Модель можна підмінити через GEMINI_MODEL у .env (для щільних рукописних
+// таблиць «lite»-модель частіше плутає «x» і числа — спробуйте потужнішу).
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 export interface ParsedCitySheetEmployee {
   name: string;
   // hours[i] = кількість годин у день (i+1); null = "x" / порожньо / нерозбірливо
   hours: (number | null)[];
+  // Підсумок із останньої колонки фото («Hod. celkem»), якщо він є. Використовується
+  // ЛИШЕ для перевірки: сума розпізнаних днів має збігатися з ним.
+  total: number | null;
 }
 
 export interface ParsedCitySheet {
@@ -42,7 +47,7 @@ export const parseCitySheetPhoto = async (
 - У шапці зазвичай написано назву місця/міста (може бути підписано як "місто:", "місце:", "místo:" або просто написано від руки) і дату початку місяця (може бути підписана як "дата:", "nástup:" або просто число).
 - Далі йде таблиця: перший рядок — номери днів місяця (1, 2, 3 ... 30/31).
 - Кожен наступний рядок — один працівник: у першій колонці прізвище/ім'я (як написано, навіть скорочено), а в колонках днів — або число (кількість відпрацьованих годин, може бути з десятковою частиною, наприклад 11.5), або літера "x"/"х" (день не відпрацьований), або клітинка може бути порожньою чи нерозбірливою.
-- В кінці рядка іноді є підсумкова колонка з сумою годин — її НЕ повертай, вона рахується окремо.
+- В кінці рядка зазвичай є підсумкова колонка з сумою годин («Hod. celkem» / «Всього»). Повертай її окремим числом у полі "total" (тільки для перевірки; НЕ вписуй її в масив "hours"). Якщо колонки немає або число нерозбірливе — null.
 
 Поверни ТІЛЬКИ валідний JSON (без markdown, без пояснень) такого виду:
 {
@@ -50,7 +55,7 @@ export const parseCitySheetPhoto = async (
   "year": 2026,
   "month": 8,
   "employees": [
-    { "name": "Ivan Savula", "hours": [11.5, null, 11.5, ...] },
+    { "name": "Ivan Savula", "hours": [11.5, null, 11.5, ...], "total": 294.5 },
     ...
   ]
 }
@@ -82,6 +87,7 @@ export const parseCitySheetPhoto = async (
     config: {
       systemInstruction: systemPrompt,
       responseMimeType: 'application/json',
+      temperature: 0,
     },
   });
 
@@ -118,7 +124,12 @@ export const parseCitySheetPhoto = async (
         const num = Number(v);
         hours.push(v === null || v === undefined || Number.isNaN(num) ? null : num);
       }
-      return { name: String(e.name).trim(), hours };
+      const totalNum = e.total === null || e.total === undefined || e.total === '' ? NaN : Number(e.total);
+      return {
+        name: String(e.name).trim(),
+        hours,
+        total: Number.isFinite(totalNum) ? totalNum : null,
+      };
     });
 
   if (employees.length === 0) {

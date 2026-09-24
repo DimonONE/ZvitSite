@@ -86,6 +86,8 @@ export interface CitySheetRow {
   recognizedName: string;
   hours: (number | null)[];
   totalHours: number;
+  // підсумок з фото (колонка «Hod. celkem»), для звірки; null — не розпізнано
+  photoTotal: number | null;
   matchedEmployeeId: string | null;
   matchedEmployeeName: string | null;
 }
