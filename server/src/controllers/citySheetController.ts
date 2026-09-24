@@ -52,13 +52,18 @@ export const previewCitySheetPhoto = async (req: Request, res: Response) => {
       if (match) resolvedCity = { _id: String(match._id), name: match.name };
     }
 
-    // Шукаємо існуючих працівників лише для того, щоб ПІДКАЗАТИ збіги у
-    // прев'ю — нічого при цьому не змінюємо і не створюємо.
-    const employeeQuery = resolvedCity ? { cityId: resolvedCity._id } : {};
-    const allEmployees = await Employee.find(employeeQuery);
+    // Працівник може працювати в кількох місцях, тому шукаємо збіги серед ВСІХ
+    // працівників, але спершу серед «домашніх» працівників цього міста.
+    // Нічого при цьому не змінюємо і не створюємо.
+    const allEmployees = await Employee.find();
+    const cityEmployees = resolvedCity
+      ? allEmployees.filter((e) => String(e.cityId) === resolvedCity!._id)
+      : [];
 
     const rows = parsed.employees.map((recognized) => {
-      const employee = allEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name));
+      const employee =
+        cityEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name)) ??
+        allEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name));
       const totalHours = recognized.hours.reduce((sum: number, h) => sum + (h ?? 0), 0);
       return {
         recognizedName: recognized.name,
@@ -100,14 +105,17 @@ interface ConfirmRow {
 
 export const confirmCitySheetImport = async (req: Request, res: Response) => {
   try {
-    const { year, month, cityName, rows } = req.body as {
-      year: number;
-      month: number;
+    const body = req.body as {
+      year: number | string;
+      month: number | string;
       cityName: string;
       rows: ConfirmRow[];
     };
+    const { cityName, rows } = body;
+    const year = Number(body.year);
+    const month = Number(body.month);
 
-    if (!year || !month) {
+    if (!year || !month || month < 1 || month > 12) {
       return res.status(400).json({ error: 'year and month are required' });
     }
     if (!cityName?.trim()) {
@@ -155,9 +163,11 @@ export const confirmCitySheetImport = async (req: Request, res: Response) => {
       let employee = row.employeeId ? await Employee.findById(row.employeeId) : null;
       let created = false;
 
+      // Існуючого працівника НЕ переносимо між містами: він може працювати
+      // в кількох місцях. Місто зберігається в самому табелі (Timesheet.cityId).
       // Користувач підтвердив, що це новий працівник (нема прив'язки до
       // існуючого) — тільки тепер, після підтвердження, його реально
-      // створюємо в базі.
+      // створюємо в базі (з цим містом як «домашнім»).
       if (!employee) {
         employee = await Employee.create({ fullName: name, cityId: city._id });
         created = true;
@@ -173,7 +183,7 @@ export const confirmCitySheetImport = async (req: Request, res: Response) => {
       });
 
       await Timesheet.findOneAndUpdate(
-        { employeeId: employee._id, year, month },
+        { employeeId: employee._id, cityId: city._id, year, month },
         { days: mergedDays, updatedAt: new Date() },
         { upsert: true }
       );

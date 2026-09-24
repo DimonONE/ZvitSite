@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getTimesheet, updateTimesheet, getCities, getEmployee } from '../api';
-import { Timesheet, City, Employee } from '../types';
+import { Timesheet, City } from '../types';
 import TimesheetPhotoImport from '../components/TimesheetPhotoImport';
 
 interface DayEntry {
@@ -32,10 +32,14 @@ const generateDays = (year: number, month: number): DayEntry[] => {
 const WorkDaysForm = () => {
   const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Місто (місце роботи), для якого редагуємо табель. Без нього — «домашнє»
+  // місто працівника. Місяць/рік можна передати як ?year=&month=.
+  const cityIdParam = searchParams.get('cityId') || undefined;
 
   const [currentDate] = useState(new Date());
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth() + 1;
+  const year = Number(searchParams.get('year')) || currentDate.getFullYear();
+  const month = Number(searchParams.get('month')) || currentDate.getMonth() + 1;
 
   const [days, setDays] = useState<DayEntry[]>(() => generateDays(year, month));
   const [quickFillHours, setQuickFillHours] = useState(11);
@@ -47,7 +51,7 @@ const WorkDaysForm = () => {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, year, month]);
+  }, [employeeId, cityIdParam, year, month]);
 
   const loadData = async () => {
     console.log('Loading data for employeeId:', employeeId);
@@ -60,7 +64,7 @@ const WorkDaysForm = () => {
       // Завантажуємо дані паралельно
       const [employeeResponse, timesheetResponse] = await Promise.all([
         getEmployee(employeeId),
-        getTimesheet(employeeId, year, month),
+        getTimesheet(employeeId, year, month, cityIdParam),
       ]);
 
       console.log('Employee response:', employeeResponse.data);
@@ -71,7 +75,7 @@ const WorkDaysForm = () => {
 
       // Тепер завантажуємо місто за cityId працівника
       const citiesResponse = await getCities();
-      const city = citiesResponse.data.find((c: City) => c._id === employee.cityId);
+      const city = citiesResponse.data.find((c: City) => c._id === (cityIdParam ?? employee.cityId));
       if (city) {
         setCityName(city.name);
       }
@@ -150,7 +154,7 @@ const WorkDaysForm = () => {
       const payload: Partial<Timesheet> = {
         days: days.map(({ day, hours }) => ({ day, hours })) as Timesheet['days'],
       };
-      await updateTimesheet(employeeId, year, month, payload);
+      await updateTimesheet(employeeId, year, month, payload, cityIdParam);
       navigate(-1);
     } catch (error) {
       console.error('Failed to save work days:', error);
@@ -367,6 +371,7 @@ const WorkDaysForm = () => {
             employeeId={employeeId}
             year={year}
             month={month}
+            cityId={cityIdParam}
             onImported={handlePhotoImported}
           />
         )}

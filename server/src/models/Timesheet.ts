@@ -10,6 +10,9 @@ export interface ITimesheetDay {
 
 export interface ITimesheet extends Document {
   employeeId: mongoose.Types.ObjectId;
+  // Місце (місто/об'єкт), на якому відпрацьовані ці години. Один працівник
+  // може мати окремі табелі в різних місцях за той самий місяць.
+  cityId: mongoose.Types.ObjectId;
   year: number;
   month: number;
   days: ITimesheetDay[];
@@ -40,6 +43,11 @@ const TimesheetSchema = new Schema<ITimesheet>({
     ref: 'Employee',
     required: true,
   },
+  cityId: {
+    type: Schema.Types.ObjectId,
+    ref: 'City',
+    required: true,
+  },
   year: {
     type: Number,
     required: true,
@@ -57,7 +65,10 @@ const TimesheetSchema = new Schema<ITimesheet>({
   },
 });
 
-// Унікальний індекс для одного табеля на місяць для працівника
-TimesheetSchema.index({ employeeId: 1, year: 1, month: 1 }, { unique: true });
+// Один табель на місяць для пари «працівник + місто».
+// (Старий індекс {employeeId, year, month} видаляється міграцією при старті.)
+TimesheetSchema.index({ employeeId: 1, cityId: 1, year: 1, month: 1 }, { unique: true });
+// Швидка вибірка всіх табелів міста за місяць (експорт / прев'ю).
+TimesheetSchema.index({ cityId: 1, year: 1, month: 1 });
 
 export default mongoose.model<ITimesheet>('Timesheet', TimesheetSchema);

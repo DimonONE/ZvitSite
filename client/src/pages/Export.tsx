@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getCities, getCityEmployees, getTimesheet } from '../api';
-import { City, Employee } from '../types';
+import { getCities, getCityMonth } from '../api';
+import { City } from '../types';
 import TimesheetPreview from '../components/TimesheetPreview';
 import { exportToExcel } from '../utils/excelExport';
 
@@ -13,10 +13,16 @@ const Export = () => {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
-  // Поточна дата для табелів
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth() + 1;
+  // Період табелів: за замовчуванням поточний місяць, але його можна змінити
+  // (імпортоване фото зазвичай стосується іншого, вже минулого місяця).
+  const now = new Date();
+  const [currentYear, setCurrentYear] = useState(now.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(now.getMonth() + 1);
+  const MONTH_NAMES = [
+    'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+    'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
+  ];
+  const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 3 + i);
 
   useEffect(() => {
     loadCities();
@@ -41,7 +47,7 @@ const Export = () => {
     }));
   };
 
-  const handlePrint = (cityId: string, cityName: string) => {
+  const handlePrint = (_cityId: string, cityName: string) => {
     console.log('Print clicked for:', cityName);
     // Відкриваємо діалог друку для розгорнутої таблиці
     window.print();
@@ -50,41 +56,13 @@ const Export = () => {
   const handleExport = async (cityId: string, cityName: string) => {
     console.log('Export clicked for:', cityName);
     try {
-      // Завантажуємо дані для експорту
-      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-      const employeesResponse = await getCityEmployees(cityId);
-      const employeesList = employeesResponse.data;
-
-      // Завантажуємо табелі для кожного працівника
-      const employeesWithHours = await Promise.all(
-        employeesList.map(async (employee: Employee) => {
-          try {
-            const timesheetResponse = await getTimesheet(employee._id, currentYear, currentMonth);
-            const timesheetDays = timesheetResponse.data.days || [];
-
-            const hours = Array.from({ length: daysInMonth }, (_, i) => {
-              const day = i + 1;
-              const dayData = timesheetDays.find((d: any) => d.day === day);
-              return dayData?.hours ?? null;
-            });
-
-            const totalHours = hours.reduce((sum, h) => sum + (h || 0), 0);
-
-            return {
-              fullName: employee.fullName,
-              hours,
-              totalHours,
-            };
-          } catch (error) {
-            console.error(`Failed to load timesheet for employee ${employee._id}:`, error);
-            return {
-              fullName: employee.fullName,
-              hours: Array(daysInMonth).fill(null),
-              totalHours: 0,
-            };
-          }
-        })
-      );
+      // Години саме цього міста за обраний місяць (з сервера)
+      const response = await getCityMonth(cityId, currentYear, currentMonth);
+      const employeesWithHours = response.data.rows.map((r) => ({
+        fullName: r.fullName,
+        hours: r.hours,
+        totalHours: r.totalHours,
+      }));
 
       // Експортуємо в Excel
       exportToExcel(cityName, currentYear, currentMonth, employeesWithHours);
@@ -113,6 +91,32 @@ const Export = () => {
       <div className="hidden md:block mb-6">
         <h1 className="text-[#1c2126] text-2xl font-bold">Експорт табелів</h1>
         <p className="text-[#737a85] text-sm mt-1">Оберіть місто для експорту або друку табелів</p>
+      </div>
+
+      {/* Period picker */}
+      <div className="flex gap-2 mb-4">
+        <select
+          value={currentMonth}
+          onChange={(e) => setCurrentMonth(Number(e.target.value))}
+          className="h-9 px-3 bg-white border border-[#e5e8ed] rounded-lg text-sm text-[#1c2126]"
+        >
+          {MONTH_NAMES.map((name, i) => (
+            <option key={i + 1} value={i + 1}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={currentYear}
+          onChange={(e) => setCurrentYear(Number(e.target.value))}
+          className="h-9 px-3 bg-white border border-[#e5e8ed] rounded-lg text-sm text-[#1c2126]"
+        >
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* City cards */}

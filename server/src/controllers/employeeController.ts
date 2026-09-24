@@ -1,10 +1,16 @@
 import { Request, Response } from 'express';
 import Employee from '../models/Employee';
+import Timesheet from '../models/Timesheet';
 
 export const getCityEmployees = async (req: Request, res: Response) => {
   try {
     const { cityId } = req.params;
-    const employees = await Employee.find({ cityId }).sort({ createdAt: -1 });
+    // У місті показуємо і «домашніх» працівників, і тих, хто має тут табелі
+    // (працівник може працювати в кількох місцях).
+    const employeeIdsWithSheets = await Timesheet.distinct('employeeId', { cityId });
+    const employees = await Employee.find({
+      $or: [{ cityId }, { _id: { $in: employeeIdsWithSheets } }],
+    }).sort({ createdAt: -1 });
     res.json(employees);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch employees' });
@@ -58,6 +64,7 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
+    await Timesheet.deleteMany({ employeeId: id });
     res.json({ message: 'Employee deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete employee' });

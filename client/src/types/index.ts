@@ -24,6 +24,7 @@ export interface TimesheetDay {
 export interface Timesheet {
   _id: string;
   employeeId: string;
+  cityId: string;
   year: number;
   month: number;
   days: TimesheetDay[];

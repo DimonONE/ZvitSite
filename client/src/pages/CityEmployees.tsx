@@ -226,7 +226,7 @@ const CityEmployees = () => {
                       />
                     </div>
                     <button
-                      onClick={() => navigate(`/employees/${employee._id}/timesheet`)}
+                      onClick={() => navigate(`/employees/${employee._id}/timesheet?cityId=${cityId}`)}
                       className="text-sm font-semibold text-gray-900 hover:text-primary transition-colors text-left truncate"
                     >
                       {employee.fullName}
@@ -260,7 +260,7 @@ const CityEmployees = () => {
                         <button
                           onClick={() => {
                             setOpenMenuId(null);
-                            navigate(`/employees/${employee._id}/timesheet`);
+                            navigate(`/employees/${employee._id}/timesheet?cityId=${cityId}`);
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
@@ -307,7 +307,7 @@ const CityEmployees = () => {
                 </div>
 
                 <button
-                  onClick={() => navigate(`/employees/${employee._id}/timesheet`)}
+                  onClick={() => navigate(`/employees/${employee._id}/timesheet?cityId=${cityId}`)}
                   className="flex-1 min-w-0 text-left"
                 >
                   <div className="text-sm font-semibold text-gray-900 truncate">
@@ -329,7 +329,7 @@ const CityEmployees = () => {
                 </button>
 
                 <ChevronRight
-                  onClick={() => navigate(`/employees/${employee._id}/timesheet`)}
+                  onClick={() => navigate(`/employees/${employee._id}/timesheet?cityId=${cityId}`)}
                   className="w-4 h-4 text-gray-300 shrink-0 cursor-pointer"
                 />
 
@@ -341,7 +341,7 @@ const CityEmployees = () => {
                     <button
                       onClick={() => {
                         setOpenMenuId(null);
-                        navigate(`/employees/${employee._id}/timesheet`);
+                        navigate(`/employees/${employee._id}/timesheet?cityId=${cityId}`);
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >

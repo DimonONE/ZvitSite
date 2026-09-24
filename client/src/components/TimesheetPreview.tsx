@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCityEmployees, getTimesheet } from '../api';
-import { Employee } from '../types';
+import { getCityMonth } from '../api';
 
 interface TimesheetPreviewProps {
   cityId: string;
@@ -9,7 +8,9 @@ interface TimesheetPreviewProps {
   month: number;
 }
 
-interface EmployeeWithHours extends Employee {
+interface EmployeeWithHours {
+  _id: string;
+  fullName: string;
   hours: (number | null)[];
   totalHours: number;
 }
@@ -31,42 +32,15 @@ const TimesheetPreview = ({ cityId, cityName, year, month }: TimesheetPreviewPro
       const days = new Date(year, month, 0).getDate();
       setDaysInMonth(days);
 
-      // Завантажуємо працівників міста
-      const employeesResponse = await getCityEmployees(cityId);
-      const employeesList = employeesResponse.data;
-
-      // Завантажуємо табелі для кожного працівника
-      const employeesWithHours = await Promise.all(
-        employeesList.map(async (employee) => {
-          try {
-            const timesheetResponse = await getTimesheet(employee._id, year, month);
-            const timesheetDays = timesheetResponse.data.days || [];
-
-            // Створюємо масив годин для всіх днів місяця
-            const hours = Array.from({ length: days }, (_, i) => {
-              const day = i + 1;
-              const dayData = timesheetDays.find((d: any) => d.day === day);
-              return dayData?.hours ?? null;
-            });
-
-            // Підраховуємо загальну кількість годин
-            const totalHours = hours.reduce((sum, h) => sum + (h || 0), 0);
-
-            return {
-              ...employee,
-              hours,
-              totalHours,
-            };
-          } catch (error) {
-            console.error(`Failed to load timesheet for employee ${employee._id}:`, error);
-            return {
-              ...employee,
-              hours: Array(days).fill(null),
-              totalHours: 0,
-            };
-          }
-        })
-      );
+      // Один запит: години саме цього міста за місяць (працівник може мати
+      // окремі табелі в різних місцях).
+      const response = await getCityMonth(cityId, year, month);
+      const employeesWithHours: EmployeeWithHours[] = response.data.rows.map((r) => ({
+        _id: r.employeeId,
+        fullName: r.fullName,
+        hours: r.hours,
+        totalHours: r.totalHours,
+      }));
 
       setEmployees(employeesWithHours);
     } catch (error) {

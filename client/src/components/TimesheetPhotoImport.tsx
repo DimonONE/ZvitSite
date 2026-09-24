@@ -6,6 +6,7 @@ interface TimesheetPhotoImportProps {
   employeeId: string;
   year: number;
   month: number;
+  cityId?: string;
   onImported: (timesheet: Timesheet) => void;
 }
 
@@ -13,7 +14,7 @@ interface TimesheetPhotoImportProps {
 // відправляє фото на сервер (там воно розпізнається через AI) і одразу
 // підставляє розпізнані дні у форму. Дані вже збережені в MongoDB на
 // цей момент — форма просто відображає актуальний стан.
-const TimesheetPhotoImport = ({ employeeId, year, month, onImported }: TimesheetPhotoImportProps) => {
+const TimesheetPhotoImport = ({ employeeId, year, month, cityId, onImported }: TimesheetPhotoImportProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,7 @@ const TimesheetPhotoImport = ({ employeeId, year, month, onImported }: Timesheet
     setUploading(true);
     setError(null);
     try {
-      const response = await importTimesheetPhoto(employeeId, year, month, file);
+      const response = await importTimesheetPhoto(employeeId, year, month, file, cityId);
       onImported(response.data);
     } catch (err) {
       console.error('Failed to import timesheet photo:', err);

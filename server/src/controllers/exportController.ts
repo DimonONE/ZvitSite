@@ -4,14 +4,26 @@ import Timesheet from '../models/Timesheet';
 import Employee from '../models/Employee';
 import City from '../models/City';
 import { getDayName } from '../utils/timesheetUtils';
+import { buildCityMonth } from '../utils/cityTimesheet';
 
 export const exportTimesheetToExcel = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;
 
-    // Завантажуємо дані
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // Табель належить парі «працівник + місто»: ?cityId=... або домашнє місто.
+    const cityId =
+      typeof req.query.cityId === 'string' && req.query.cityId
+        ? req.query.cityId
+        : String(employee.cityId);
+
     const timesheet = await Timesheet.findOne({
       employeeId,
+      cityId,
       year: parseInt(year),
       month: parseInt(month),
     });
@@ -20,12 +32,7 @@ export const exportTimesheetToExcel = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Timesheet not found' });
     }
 
-    const employee = await Employee.findById(employeeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-
-    const city = await City.findById(employee.cityId);
+    const city = await City.findById(cityId);
 
     // Створюємо Excel файл
     const workbook = new ExcelJS.Workbook();
@@ -162,7 +169,10 @@ export const exportCityMonthToExcel = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'City not found' });
     }
 
-    const employees = await Employee.find({ cityId }).sort({ createdAt: 1 });
+    const rowsData = await buildCityMonth(cityId, yearNum, monthNum);
+    console.log(
+      `[exportCityMonthToExcel] cityId=${cityId} city="${city.name}" year=${yearNum} month=${monthNum} rows=${rowsData.length}`
+    );
     const totalDays = new Date(yearNum, monthNum, 0).getDate();
     const lastDayCol = 1 + totalDays; // колонка A = 1, дні йдуть з колонки B
     const totalCol = lastDayCol + 1;
@@ -201,18 +211,15 @@ export const exportCityMonthToExcel = async (req: Request, res: Response) => {
 
     let rowNum = 4;
     const firstDataRow = rowNum;
-    for (const employee of employees) {
-      const timesheet = await Timesheet.findOne({ employeeId: employee._id, year: yearNum, month: monthNum });
-      const daysByNumber = new Map((timesheet?.days || []).map((d) => [d.day, d]));
-
+    for (const row of rowsData) {
       const nameCell = worksheet.getCell(rowNum, 1);
-      nameCell.value = employee.fullName;
+      nameCell.value = row.fullName;
       nameCell.font = nameFont;
 
       for (let d = 1; d <= totalDays; d++) {
-        const dayData = daysByNumber.get(d);
+        const value = row.hours[d - 1];
         const cell = worksheet.getCell(rowNum, 1 + d);
-        cell.value = dayData && dayData.hours !== null && dayData.hours !== undefined ? dayData.hours : 'x';
+        cell.value = value !== null && value !== undefined ? value : 'x';
         cell.font = baseFont;
       }
 
@@ -257,5 +264,23 @@ export const exportCityMonthToExcel = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('City export error:', error);
     res.status(500).json({ error: 'Failed to export city timesheet' });
+  }
+};
+
+
+// JSON-версія зведеного табеля міста за місяць: ті самі дані, що йдуть в
+// Excel. Використовується сторінкою «Експорт» і прев'ю.
+export const getCityMonthJson = async (req: Request, res: Response) => {
+  try {
+    const { cityId, year, month } = req.params;
+    const city = await City.findById(cityId);
+    if (!city) {
+      return res.status(404).json({ error: 'City not found' });
+    }
+    const rows = await buildCityMonth(cityId, parseInt(year), parseInt(month));
+    res.json({ cityId, cityName: city.name, year: parseInt(year), month: parseInt(month), rows });
+  } catch (error) {
+    console.error('City month error:', error);
+    res.status(500).json({ error: 'Failed to load city timesheet' });
   }
 };

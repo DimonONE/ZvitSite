@@ -29,21 +29,58 @@ export const uploadEmployeePhoto = (id: string, file: File) => {
 };
 
 // Timesheets
-export const getTimesheet = (employeeId: string, year: number, month: number) =>
-  api.get<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`);
-export const updateTimesheet = (employeeId: string, year: number, month: number, data: Partial<Timesheet>) =>
-  api.put<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`, data);
-export const exportTimesheet = (employeeId: string, year: number, month: number) =>
-  api.get(`/employees/${employeeId}/timesheets/${year}/${month}/export`, { responseType: 'blob' });
-export const importTimesheetPhoto = (employeeId: string, year: number, month: number, file: File) => {
+// Табель належить парі «працівник + місто» (працівник може працювати в кількох
+// місцях). cityId необов'язковий: без нього сервер бере «домашнє» місто працівника.
+const cityQuery = (cityId?: string) => (cityId ? { params: { cityId } } : {});
+
+export const getTimesheet = (employeeId: string, year: number, month: number, cityId?: string) =>
+  api.get<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`, cityQuery(cityId));
+export const updateTimesheet = (
+  employeeId: string,
+  year: number,
+  month: number,
+  data: Partial<Timesheet>,
+  cityId?: string
+) => api.put<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`, data, cityQuery(cityId));
+export const exportTimesheet = (employeeId: string, year: number, month: number, cityId?: string) =>
+  api.get(`/employees/${employeeId}/timesheets/${year}/${month}/export`, {
+    responseType: 'blob',
+    ...cityQuery(cityId),
+  });
+export const importTimesheetPhoto = (
+  employeeId: string,
+  year: number,
+  month: number,
+  file: File,
+  cityId?: string
+) => {
   const formData = new FormData();
   formData.append('photo', file);
   return api.post<Timesheet>(
     `/employees/${employeeId}/timesheets/${year}/${month}/import-photo`,
     formData,
-    { headers: { 'Content-Type': 'multipart/form-data' } }
+    { headers: { 'Content-Type': 'multipart/form-data' }, ...cityQuery(cityId) }
   );
 };
+
+export interface CityMonthRow {
+  employeeId: string;
+  fullName: string;
+  hours: (number | null)[];
+  totalHours: number;
+}
+
+export interface CityMonthResult {
+  cityId: string;
+  cityName: string;
+  year: number;
+  month: number;
+  rows: CityMonthRow[];
+}
+
+// Зведений табель міста за місяць (години саме з цього міста).
+export const getCityMonth = (cityId: string, year: number, month: number) =>
+  api.get<CityMonthResult>(`/cities/${cityId}/city-timesheet/${year}/${month}`);
 
 export interface CitySheetRow {
   recognizedName: string;

@@ -4,28 +4,42 @@ import { generateTimesheetDays } from '../utils/timesheetUtils';
 import { parseTimesheetPhoto } from '../services/aiTimesheetParser';
 import Employee from '../models/Employee';
 
+// Табель належить парі «працівник + місто». Місто береться з ?cityId=...;
+// якщо його не передали — використовуємо «домашнє» місто працівника.
+const resolveCityId = async (employeeId: string, queryCityId: unknown) => {
+  if (typeof queryCityId === 'string' && queryCityId) return queryCityId;
+  const employee = await Employee.findById(employeeId).select('cityId');
+  return employee ? String(employee.cityId) : null;
+};
+
 export const getTimesheet = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;
-    let timesheet = await Timesheet.findOne({
+    const cityId = await resolveCityId(employeeId, req.query.cityId);
+    if (!cityId) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const timesheet = await Timesheet.findOne({
       employeeId,
+      cityId,
       year: parseInt(year),
       month: parseInt(month),
     });
 
-    // Якщо табеля не існує, створюємо з автозаповненням вихідних
-    if (!timesheet) {
-      const days = generateTimesheetDays(parseInt(year), parseInt(month));
-      timesheet = new Timesheet({
-        employeeId,
-        year: parseInt(year),
-        month: parseInt(month),
-        days,
-      });
-      await timesheet.save();
+    if (timesheet) {
+      return res.json(timesheet);
     }
 
-    res.json(timesheet);
+    // Табеля ще немає: віддаємо шаблон місяця з вихідними, але в базу НЕ
+    // пишемо — інакше порожній табель «прописав» би працівника в місті.
+    res.json({
+      employeeId,
+      cityId,
+      year: parseInt(year),
+      month: parseInt(month),
+      days: generateTimesheetDays(parseInt(year), parseInt(month)),
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch timesheet' });
   }
@@ -35,9 +49,13 @@ export const updateTimesheet = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;
     const { days } = req.body;
+    const cityId = await resolveCityId(employeeId, req.query.cityId);
+    if (!cityId) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
 
     const timesheet = await Timesheet.findOneAndUpdate(
-      { employeeId, year: parseInt(year), month: parseInt(month) },
+      { employeeId, cityId, year: parseInt(year), month: parseInt(month) },
       { days, updatedAt: new Date() },
       { new: true, upsert: true }
     );
@@ -65,6 +83,8 @@ export const importTimesheetPhoto = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
+    const cityId = await resolveCityId(employeeId, req.query.cityId);
+
     const parsedDays = await parseTimesheetPhoto(
       file.buffer,
       file.mimetype,
@@ -82,7 +102,7 @@ export const importTimesheetPhoto = async (req: Request, res: Response) => {
     });
 
     const timesheet = await Timesheet.findOneAndUpdate(
-      { employeeId, year: parseInt(year), month: parseInt(month) },
+      { employeeId, cityId, year: parseInt(year), month: parseInt(month) },
       { days: mergedDays, updatedAt: new Date() },
       { new: true, upsert: true }
     );
