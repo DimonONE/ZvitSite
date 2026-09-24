@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import type { CityMonthRow } from './cityTimesheet';
 
 // Зведений табель міста за місяць у вигляді еталонного Excel-файлу:
-//   рядок 1 — «místo: <місто>» | зелена клітинка | «nástup: 1.MM.YYYY» | порожня клітинка
+//   рядок 1 — «místo: <місто>» | порожньо | зелена клітинка | «nástup: 1.MM.YYYY» | порожньо (усе в рамці)
 //   рядок 2 — «Jméno» | «1.» … «N.» | «Hod. celkem»
 //   рядок 3 — зелена смуга-розділювач
 //   рядки 4+ — працівник по центру | години (червоний «x», якщо не працював) | =SUM
@@ -56,13 +56,13 @@ export const buildCityMonthWorkbook = (
   ws.getRow(2).height = 20;
   ws.getRow(3).height = 15;
 
-  // ---- рядок 1: місто / дата ------------------------------------------
+  // ---- рядок 1: місто / дата (весь рядок обведено рамкою) -------------
   const cityCell = ws.getCell(1, 1);
   cityCell.value = `místo: ${cityName}`;
   cityCell.font = F_BASE;
   cityCell.alignment = { horizontal: 'left', vertical: 'middle' };
-  cityCell.border = box;
 
+  ws.mergeCells(1, 2, 1, midCol - 2); // порожня частина B…(перед зеленою)
   ws.getCell(1, midCol - 1).fill = fillGreen; // зелена клітинка над серединою місяця
 
   ws.mergeCells(1, midCol, 1, lastDayCol);
@@ -71,7 +71,24 @@ export const buildCityMonthWorkbook = (
   dateCell.font = F_BASE;
   dateCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
-  ws.getCell(1, totalCol).border = box;
+  // Рамка рядка 1. Усередині об'єднаних діапазонів (B…N і P…AF) вертикальних
+  // ліній бути не повинно — лише зовнішній контур, тому там межі ставимо по краях:
+  // зверху/знизу на кожній клітинці, зліва — на першій, справа — на останій.
+  const outline = (from: number, to: number) => {
+    for (let col = from; col <= to; col++) {
+      ws.getCell(1, col).border = {
+        top: thin,
+        bottom: thin,
+        ...(col === from ? { left: thin } : {}),
+        ...(col === to ? { right: thin } : {}),
+      };
+    }
+  };
+  ws.getCell(1, 1).border = box; // A1
+  outline(2, midCol - 2); // B…N
+  ws.getCell(1, midCol - 1).border = box; // зелена клітинка
+  outline(midCol, lastDayCol); // P…AF
+  ws.getCell(1, totalCol).border = box; // над «Hod. celkem»
 
   // ---- рядок 2: заголовки ----------------------------------------------
   const headers: (string | number)[] = [
@@ -140,9 +157,14 @@ export const buildCityMonthWorkbook = (
   }
   const lastDataRow = r - 1;
 
-  // ---- загальна сума (через порожній рядок) ----------------------------
+  // ---- порожній рядок-розділювач у рамці + загальна сума в рамці --------
   if (rows.length > 0) {
-    const grandRow = lastDataRow + 2;
+    const spacerRow = lastDataRow + 1;
+    ws.getRow(spacerRow).height = 28;
+    for (let col = 1; col <= totalCol; col++) ws.getCell(spacerRow, col).border = box;
+
+    const grandRow = spacerRow + 1;
+    ws.getRow(grandRow).height = 30;
     const col = ws.getColumn(totalCol).letter;
     const grand = ws.getCell(grandRow, totalCol);
     grand.value = {
@@ -151,6 +173,7 @@ export const buildCityMonthWorkbook = (
     };
     grand.font = F_BASE;
     grand.alignment = CENTER;
+    grand.border = box;
   }
 
   return workbook;
