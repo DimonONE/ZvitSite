@@ -8,10 +8,9 @@ import {
   CitySheetConfirmResult,
   CitySheetConfirmRow,
 } from '../api';
-import { City, Employee } from '../types';
+import { Employee } from '../types';
 
 interface QuickPhotoImportModalProps {
-  cities: City[];
   onClose: () => void;
   onDataChanged: () => void;
 }
@@ -30,10 +29,15 @@ interface EditableRow {
 const monthLabel = (year: number, month: number) => `${month.toString().padStart(2, '0')}.${year}`;
 
 // Модалка на дашборді: завантажуєте ОДНЕ фото зведеного табеля по місту —
-// система розпізнає всіх працівників і години, показує ТОЧНЕ прев'ю таблиці
-// (у вигляді, в якому вона піде в Excel), і тільки після підтвердження
-// користувачем створює відсутніх працівників і зберігає табель у базу.
-const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImportModalProps) => {
+// система розпізнає місце, всіх працівників і години, показує ТОЧНЕ прев'ю
+// таблиці (у вигляді, в якому вона піде в Excel), і тільки після
+// підтвердження користувачем: створює відсутнє місце (якщо такого ще нема
+// в базі), створює відсутніх працівників і зберігає табель у базу.
+//
+// Місце НІКОЛИ не обирається вручну зі списку — воно завжди береться з
+// того, що розпізналось на фото (користувач може лише виправити текст,
+// якщо OCR помилився).
+const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<'upload' | 'preview' | 'saved'>('upload');
@@ -42,28 +46,25 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
   const [error, setError] = useState<string | null>(null);
 
   const [preview, setPreview] = useState<CitySheetPreviewResult | null>(null);
-  // 'existing' — прив'язуємо до вже наявного місця з бази; 'new' — на фото
-  // місце, якого в базі ще немає, воно буде створене razom з працівниками
-  // при підтвердженні.
-  const [cityMode, setCityMode] = useState<'existing' | 'new'>('existing');
-  const [cityId, setCityId] = useState<string>('');
-  const [newCityName, setNewCityName] = useState<string>('');
+  const [cityName, setCityName] = useState<string>('');
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [cityEmployees, setCityEmployees] = useState<Employee[]>([]);
   const [saved, setSaved] = useState<CitySheetConfirmResult | null>(null);
 
-  // Коли обрано/визначено ІСНУЮЧЕ місце — підвантажуємо його працівників,
-  // щоб можна було вручну прив'язати рядок до когось із них замість
-  // створення нового. Для нового місця список завжди порожній.
+  // Якщо фото розпізналось як вже існуюче місце — підвантажуємо його
+  // працівників, щоб можна було вручну прив'язати рядок до когось із них
+  // замість створення нового. Для нового місця (якого ще нема в базі)
+  // список завжди порожній — і це правильно, там ще нікого немає.
   useEffect(() => {
-    if (cityMode !== 'existing' || !cityId) {
+    const existingCityId = preview?.resolvedCity?._id;
+    if (!existingCityId) {
       setCityEmployees([]);
       return;
     }
-    getCityEmployees(cityId)
+    getCityEmployees(existingCityId)
       .then((res) => setCityEmployees(res.data))
       .catch((err) => console.error('Failed to load city employees:', err));
-  }, [cityMode, cityId]);
+  }, [preview?.resolvedCity?._id]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,23 +81,9 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
       const response = await previewCitySheetPhoto(file);
       const data = response.data;
       setPreview(data);
-      if (data.resolvedCity) {
-        // Знайшли таке місце в базі — просто підставляємо його.
-        setCityMode('existing');
-        setCityId(data.resolvedCity._id);
-        setNewCityName('');
-      } else if (data.detectedCityName) {
-        // На фото є назва місця, але такого в базі немає — це нове місце,
-        // одразу пропонуємо створити його з тією ж назвою (можна виправити).
-        setCityMode('new');
-        setCityId('');
-        setNewCityName(data.detectedCityName);
-      } else {
-        // Назву взагалі не вдалось прочитати — просимо обрати/ввести вручну.
-        setCityMode('existing');
-        setCityId('');
-        setNewCityName('');
-      }
+      // Місце береться автоматично з фото: якщо таке вже є в базі —
+      // береться його точна назва з бази, інакше — те, що розпізналось.
+      setCityName(data.resolvedCity?.name || data.detectedCityName || '');
       setRows(
         data.rows.map((r) => ({
           recognizedName: r.recognizedName,
@@ -140,8 +127,8 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
     updateRow(rowIndex, { hours });
   };
 
-  const canConfirm =
-    cityMode === 'existing' ? !!cityId : newCityName.trim().length > 0;
+  const canConfirm = cityName.trim().length > 0;
+  const isNewCity = canConfirm && !preview?.resolvedCity;
 
   const handleConfirm = async () => {
     if (!preview || !canConfirm) return;
@@ -157,8 +144,7 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
       const response = await confirmCitySheetImport({
         year: preview.year,
         month: preview.month,
-        cityId: cityMode === 'existing' ? cityId : null,
-        newCityName: cityMode === 'new' ? newCityName.trim() : null,
+        cityName: cityName.trim(),
         rows: payloadRows,
       });
       setSaved(response.data);
@@ -174,12 +160,11 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
 
   const handleDownload = async () => {
     if (!saved) return;
-    const city = cities.find((c) => c._id === saved.cityId);
     const res = await exportCityMonth(saved.cityId, saved.year, saved.month);
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${(city?.name || saved.cityName).replace(/\s+/g, '_')}__${saved.month
+    link.download = `${saved.cityName.replace(/\s+/g, '_')}__${saved.month
       .toString()
       .padStart(2, '0')}_${(saved.year % 100).toString().padStart(2, '0')}_.xlsx`;
     link.click();
@@ -203,7 +188,7 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
         {step === 'upload' && (
           <>
             <p className="text-[#737a85] text-sm">
-              Сфотографуйте зведений табель по місту — місто, місяць і кожного працівника
+              Сфотографуйте зведений табель по місту — місце, місяць і кожного працівника
               програма визначить сама з фото. Спочатку покажемо прев'ю для перевірки — у базу
               нічого не запишеться, поки ви не підтвердите.
             </p>
@@ -229,63 +214,31 @@ const QuickPhotoImportModal = ({ cities, onClose, onDataChanged }: QuickPhotoImp
 
         {step === 'preview' && preview && (
           <div className="flex flex-col gap-4">
-            <div className="bg-[#f2fbf6] border border-[#cdeedd] rounded-lg p-3 text-sm text-[#1c2126] flex flex-wrap items-center gap-2">
-              <span>
-                Розпізнано за <strong>{monthLabel(preview.year, preview.month)}</strong>
-                {preview.detectedCityName && <> · на фото: <strong>{preview.detectedCityName}</strong></>}
-              </span>
+            <div className="bg-[#f2fbf6] border border-[#cdeedd] rounded-lg p-3 text-sm text-[#1c2126]">
+              Розпізнано за <strong>{monthLabel(preview.year, preview.month)}</strong>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-semibold text-[#1c2126] shrink-0">Місце:</label>
-                <select
-                  value={cityMode === 'existing' ? cityId : '__new__'}
-                  onChange={(e) => {
-                    if (e.target.value === '__new__') {
-                      setCityMode('new');
-                      setCityId('');
-                      if (!newCityName) setNewCityName(preview.detectedCityName || '');
-                    } else {
-                      setCityMode('existing');
-                      setCityId(e.target.value);
-                    }
-                  }}
-                  className="bg-[#fafafc] border border-[#e5e8ed] h-9 px-2 rounded-lg text-sm flex-1"
-                >
-                  <option value="" disabled>Оберіть місце...</option>
-                  {cities.map((c) => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
-                  ))}
-                  <option value="__new__">+ Нове місце...</option>
-                </select>
-              </div>
-
-              {cityMode === 'new' && (
-                <div className="flex items-center gap-2 pl-[76px]">
-                  <input
-                    value={newCityName}
-                    onChange={(e) => setNewCityName(e.target.value)}
-                    placeholder="Назва нового місця"
-                    className="bg-[#fafafc] border border-[#e5e8ed] h-9 px-2 rounded-lg text-sm flex-1"
-                  />
-                  <span className="text-[10px] text-[#21ba6b] font-semibold whitespace-nowrap">
-                    буде створено
-                  </span>
-                </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-[#1c2126] shrink-0">Місце:</label>
+              <input
+                value={cityName}
+                onChange={(e) => setCityName(e.target.value)}
+                placeholder="Не вдалось розпізнати — введіть вручну"
+                className="bg-[#fafafc] border border-[#e5e8ed] h-9 px-2 rounded-lg text-sm flex-1"
+              />
+              {isNewCity && (
+                <span className="text-[10px] text-[#21ba6b] font-semibold whitespace-nowrap shrink-0">
+                  нове, буде створено
+                </span>
               )}
             </div>
+            <p className="text-xs text-[#737a85] -mt-2">
+              Визначається автоматично з фото. Виправте тут, тільки якщо розпізнавання
+              помилилось у назві — вибирати зі списку не потрібно.
+            </p>
             {!canConfirm && (
               <p className="text-xs text-amber-600">
-                {cityMode === 'existing'
-                  ? 'Оберіть місце зі списку або натисніть "+ Нове місце..." — без нього не можна зберегти.'
-                  : 'Введіть назву нового місця.'}
-              </p>
-            )}
-            {cityMode === 'new' && canConfirm && (
-              <p className="text-xs text-[#737a85]">
-                Такого місця немає в базі — при підтвердженні його буде створено, а всіх
-                працівників з таблиці нижче додано саме туди.
+                Не вдалося розпізнати назву місця з фото — введіть її вручну, інакше зберегти не вийде.
               </p>
             )}
 

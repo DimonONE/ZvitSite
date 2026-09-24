@@ -113,7 +113,6 @@ const Dashboard = () => {
 
         {photoModalOpen && (
           <QuickPhotoImportModal
-            cities={cities}
             onClose={() => setPhotoModalOpen(false)}
             onDataChanged={loadCities}
           />

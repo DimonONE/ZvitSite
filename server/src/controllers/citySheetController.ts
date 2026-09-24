@@ -100,45 +100,40 @@ interface ConfirmRow {
 
 export const confirmCitySheetImport = async (req: Request, res: Response) => {
   try {
-    const { year, month, cityId, newCityName, rows } = req.body as {
+    const { year, month, cityName, rows } = req.body as {
       year: number;
       month: number;
-      cityId?: string | null;
-      newCityName?: string | null;
+      cityName: string;
       rows: ConfirmRow[];
     };
 
     if (!year || !month) {
       return res.status(400).json({ error: 'year and month are required' });
     }
-    if (!cityId && !newCityName?.trim()) {
-      return res.status(400).json({ error: 'cityId or newCityName is required' });
+    if (!cityName?.trim()) {
+      return res.status(400).json({ error: 'cityName is required' });
     }
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'rows is required and must be a non-empty array' });
     }
 
+    const trimmedName = cityName.trim();
+
+    // Місто НІКОЛИ не обирається вручну — воно завжди береться з того, що
+    // розпізналось на фото (або було виправлене користувачем прямо в
+    // прев'ю). Тут просто вирішуємо: чи таке місце вже є в базі (тоді
+    // використовуємо його), чи це нове (тоді створюємо — тільки тепер,
+    // після підтвердження).
+    const existingCities = await City.find();
+    const existing = findBestNameMatch(existingCities, trimmedName, (c) => c.name);
+
     let city;
     let cityCreated = false;
-    if (cityId) {
-      city = await City.findById(cityId);
-      if (!city) {
-        return res.status(404).json({ error: 'City not found' });
-      }
+    if (existing) {
+      city = existing;
     } else {
-      const trimmedName = newCityName!.trim();
-      // На випадок, якщо місце з такою (чи дуже схожою) назвою вже встигли
-      // створити — не плодимо дублікати, а використовуємо існуюче.
-      const existingCities = await City.find();
-      const existing = existingCities.find((c) => namesLooselyMatch(c.name, trimmedName));
-      if (existing) {
-        city = existing;
-      } else {
-        // Місця з такою назвою ще немає в базі — це новий об'єкт/місто.
-        // Створюємо його ТІЛЬКИ зараз, після підтвердження користувачем.
-        city = await City.create({ name: trimmedName });
-        cityCreated = true;
-      }
+      city = await City.create({ name: trimmedName });
+      cityCreated = true;
     }
 
     const baseDays = generateTimesheetDays(year, month);

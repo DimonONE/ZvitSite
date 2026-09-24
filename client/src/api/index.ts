@@ -103,9 +103,10 @@ export const previewCitySheetPhoto = (
 export const confirmCitySheetImport = (data: {
   year: number;
   month: number;
-  // Передайте ОДНЕ з двох: cityId (існуюче місце) або newCityName (створити нове).
-  cityId?: string | null;
-  newCityName?: string | null;
+  // Місто завжди береться з розпізнаного фото (можна лише виправити текст
+  // в прев'ю) — не обирається зі списку. Якщо такого місця ще нема в базі,
+  // воно буде створене автоматично.
+  cityName: string;
   rows: CitySheetConfirmRow[];
 }) => api.post<CitySheetConfirmResult>('/cities/import-city-sheet-photo/confirm', data);
 
