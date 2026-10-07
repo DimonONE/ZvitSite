@@ -13,7 +13,7 @@ export interface Employee {
   createdAt: string;
 }
 
-export type DayStatus = 'worked' | 'weekend' | 'dayoff' | 'sick' | 'vacation';
+export type DayStatus = 'worked' | 'weekend' | 'dayoff' | 'sick' | 'vacation' | 'unknown';
 
 export interface TimesheetDay {
   day: number;

@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type DayStatus = 'worked' | 'weekend' | 'dayoff' | 'sick' | 'vacation';
+export type DayStatus = 'worked' | 'weekend' | 'dayoff' | 'sick' | 'vacation' | 'unknown';
 
 export interface ITimesheetDay {
   day: number;
