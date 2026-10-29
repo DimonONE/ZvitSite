@@ -4,8 +4,6 @@ import { generateTimesheetDays } from '../utils/timesheetUtils';
 import { parseTimesheetPhoto } from '../services/aiTimesheetParser';
 import Employee from '../models/Employee';
 
-// Табель належить парі «працівник + місто». Місто береться з ?cityId=...;
-// якщо його не передали — використовуємо «домашнє» місто працівника.
 const resolveCityId = async (employeeId: string, queryCityId: unknown) => {
   if (typeof queryCityId === 'string' && queryCityId) return queryCityId;
   const employee = await Employee.findById(employeeId).select('cityId');
@@ -31,8 +29,6 @@ export const getTimesheet = async (req: Request, res: Response) => {
       return res.json(timesheet);
     }
 
-    // Табеля ще немає: віддаємо шаблон місяця з вихідними, але в базу НЕ
-    // пишемо — інакше порожній табель «прописав» би працівника в місті.
     res.json({
       employeeId,
       cityId,
@@ -53,7 +49,6 @@ export const updateTimesheet = async (req: Request, res: Response) => {
     if (!cityId) {
       return res.status(404).json({ error: 'Employee not found' });
     }
-
     const timesheet = await Timesheet.findOneAndUpdate(
       { employeeId, cityId, year: parseInt(year), month: parseInt(month) },
       { days, updatedAt: new Date() },
@@ -66,9 +61,6 @@ export const updateTimesheet = async (req: Request, res: Response) => {
   }
 };
 
-// Приймає фото паперового табеля, розпізнає його через Claude і одразу
-// зберігає результат в MongoDB (той самий документ, що використовує ручне
-// редагування та експорт в Excel).
 export const importTimesheetPhoto = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;
@@ -93,9 +85,8 @@ export const importTimesheetPhoto = async (req: Request, res: Response) => {
       employee.fullName
     );
 
-    // Беремо базовий шаблон місяця (щоб дні, яких немає у відповіді AI,
-    // не зникли з табеля) і накладаємо зверху розпізнані значення.
     const baseDays = generateTimesheetDays(parseInt(year), parseInt(month));
+
     const mergedDays = baseDays.map((base) => {
       const recognized = parsedDays.find((d) => d.day === base.day);
       return recognized ?? base;
