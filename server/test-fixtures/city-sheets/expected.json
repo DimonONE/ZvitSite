@@ -1,0 +1,51 @@
+{
+  "_format": "cells: дні 1..N через пробіл. Число = години, x = закреслено (червоний хрест), _ = порожня клітинка. 11.5*5 = п'ять разів 11.5 поспіль. total = колонка 'Hod. celkem'.",
+  "sheets": [
+    {
+      "image": "cimburkova-2026-09.jpg",
+      "cityName": "Cimburkova 2311/22",
+      "year": 2026,
+      "month": 9,
+      "grandTotal": 1604.5,
+      "rows": [
+        { "name": "Lysenko Vova",    "total": 258,   "cells": "x x 11.5 11.5 10 x 11.5*5 10 x 11.5*5 10 x 11.5 12.5 11.5*3 10 x 10 x 11.5" },
+        { "name": "Strojin Vlad",    "total": 236.5, "cells": "11.5*4 10 x 11.5 11.5 x 11.5 11.5 10 x 11.5 11.5 x*5 11.5 12.5 11.5*3 10 x 10 11.5 11.5" },
+        { "name": "Horzov Petro",    "total": 248.5, "cells": "11.5*4 10 x 11.5*3 x x 10 x 11.5*5 x x 11.5*5 x x 10 11.5 11.5" },
+        { "name": "Kaprij Kolja",    "total": 280,   "cells": "11.5*4 10 x 11.5*3 x 11.5 10 x 11.5*5 10 x 11.5*5 10 x 10 11.5 11.5" },
+        { "name": "Kušnirov Ihor",   "total": 280,   "cells": "11.5*4 10 x 11.5*5 10 x 11.5*5 10 x 11.5 x 11.5*3 10 x 10 11.5 11.5" },
+        { "name": "Samarijskyj Vl",  "total": 11.5,  "cells": "11.5 x*29" },
+        { "name": "Lysenko Miša",    "total": 44.5,  "cells": "x x 11.5 11.5 10 x 11.5 x*23" },
+        { "name": "Šelevij Dima",    "total": 245.5, "cells": "x x 11.5 x 10 x 11.5 11.5 x 11.5 11.5 10 x 11.5*5 10 x 11.5*5 10 x 10 11.5 11.5" }
+      ]
+    },
+    {
+      "image": "moskevska-2026-09.jpg",
+      "cityName": "Moskevska 49",
+      "year": 2026,
+      "month": 9,
+      "grandTotal": 4080,
+      "rows": [
+        { "name": "Ivan Savula",      "total": 295.5, "cells": "11.5*5 x 11.5*6 x 11.5*6 x 11.5 8 11.5*4 x 11.5*3" },
+        { "name": "Edik Moldavan",    "total": 296.5, "cells": "11.5*5 x 11.5*6 x 11.5*6 x 11.5 9 11.5*4 x 11.5*3" },
+        { "name": "Ivan Moldavan",    "total": 296.5, "cells": "11.5*5 x 11.5*6 x 11.5*6 x 11.5 9 11.5*4 x 11.5*3" },
+        { "name": "Dima Moldavan",    "total": 103.5, "cells": "11.5*5 x 11.5 x*20 11.5*3" },
+        { "name": "Stas Moldavan",    "total": 138,   "cells": "11.5*4 x*17 11.5*5 x 11.5*3" },
+        { "name": "Nosa Ženja",       "total": 184,   "cells": "11.5*5 x 11.5 11.5 x 11.5*3 x 11.5*6 x*11" },
+        { "name": "Savula Vasyl",     "total": 276,   "cells": "11.5*5 x 11.5 x 11.5*4 x 11.5*3 x 11.5 11.5 x 11.5*6 x 11.5*3" },
+        { "name": "Ivan Motrynec",    "total": 276,   "cells": "x 11.5 x 11.5 11.5 x 11.5*6 x 11.5*6 x 11.5*6 x 11.5*3" },
+        { "name": "Cubera Ivan",      "total": 276,   "cells": "x 11.5*4 x 11.5*6 x 11.5*3 x 11.5 11.5 x 11.5*6 x 11.5*3" },
+        { "name": "Černjak Bohdan",   "total": 241.5, "cells": "11.5*5 x 11.5 x 11.5*4 x 11.5*3 x*5 11.5*5 x 11.5*3" },
+        { "name": "Mezej Dima",       "total": 253,   "cells": "11.5*4 x x 11.5*6 x 11.5*6 x 11.5*6 x*4" },
+        { "name": "Deket M. Babal",   "total": 299,   "cells": "11.5*5 x 11.5*6 x 11.5*6 x 11.5*6 x 11.5*3" },
+        { "name": "Deket Vasylk",     "total": 264.5, "cells": "11.5*5 x 11.5 x 11.5*4 x 11.5*3 x 11.5 11.5 x 11.5*6 x 11.5 x 11.5" },
+        { "name": "Tokar Ivan",       "total": 172.5, "cells": "11.5*5 x 11.5*6 x 11.5*4 x*13" },
+        { "name": "Libak Ivan",       "total": 178.5, "cells": "6 11.5*4 x 11.5*6 x 11.5*5 x*12" },
+        { "name": "Baršaj Miša",      "total": 241.5, "cells": "x*6 11.5*6 x 11.5*6 x 11.5*6 x 11.5*3" },
+        { "name": "Anton Mirčev",     "total": 92,    "cells": "_*21 11.5*5 x 11.5*3" },
+        { "name": "Vova Jusko",       "total": 92,    "cells": "_*21 11.5*5 x 11.5*3" },
+        { "name": "Saša Turdyev",     "total": 92,    "cells": "_*21 11.5*5 x 11.5*3" },
+        { "name": "Vova Ternovej",    "total": 11.5,  "cells": "_*29 11.5" }
+      ]
+    }
+  ]
+}
