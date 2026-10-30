@@ -35,6 +35,7 @@ export const getTimesheet = async (req: Request, res: Response) => {
       year: parseInt(year),
       month: parseInt(month),
       days: generateTimesheetDays(parseInt(year), parseInt(month)),
+      hourlyRate: null,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch timesheet' });
@@ -47,7 +48,7 @@ export const listEmployeeTimesheets = async (req: Request, res: Response) => {
   try {
     const { employeeId } = req.params;
     const timesheets = await Timesheet.find({ employeeId })
-      .select('cityId year month days')
+      .select('cityId year month days hourlyRate')
       .sort({ year: -1, month: -1 });
     res.json(
       timesheets.map((t) => ({
@@ -55,6 +56,7 @@ export const listEmployeeTimesheets = async (req: Request, res: Response) => {
         year: t.year,
         month: t.month,
         totalHours: t.days.reduce((sum, d) => sum + (d.hours ?? 0), 0),
+        hourlyRate: t.hourlyRate ?? null,
       }))
     );
   } catch (error) {
@@ -65,14 +67,25 @@ export const listEmployeeTimesheets = async (req: Request, res: Response) => {
 export const updateTimesheet = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;
-    const { days } = req.body;
+    const { days, hourlyRate } = req.body;
     const cityId = await resolveCityId(employeeId, req.query.cityId);
     if (!cityId) {
       return res.status(404).json({ error: 'Employee not found' });
     }
+    const update: Record<string, unknown> = { days, updatedAt: new Date() };
+    // Ставку чіпаємо лише якщо її передали: null — очистити, число — задати.
+    if (hourlyRate === null) {
+      update.hourlyRate = null;
+    } else if (hourlyRate !== undefined) {
+      const rate = Number(hourlyRate);
+      if (!Number.isFinite(rate) || rate < 0) {
+        return res.status(400).json({ error: 'Invalid hourlyRate' });
+      }
+      update.hourlyRate = rate;
+    }
     const timesheet = await Timesheet.findOneAndUpdate(
       { employeeId, cityId, year: parseInt(year), month: parseInt(month) },
-      { days, updatedAt: new Date() },
+      update,
       { new: true, upsert: true }
     );
 

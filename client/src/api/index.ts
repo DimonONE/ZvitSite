@@ -38,6 +38,7 @@ export interface TimesheetSummary {
   year: number;
   month: number;
   totalHours: number;
+  hourlyRate: number | null;
 }
 
 // Усі збережені табелі працівника (усі міста/місяці), від найновішого.

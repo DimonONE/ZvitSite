@@ -14,6 +14,8 @@ export interface ITimesheet extends Document {
   year: number;
   month: number;
   days: ITimesheetDay[];
+  // Ставка за годину саме для цього місця і місяця; null — ще не задана.
+  hourlyRate: number | null;
   updatedAt: Date;
 }
 
@@ -57,6 +59,11 @@ const TimesheetSchema = new Schema<ITimesheet>({
     max: 12,
   },
   days: [TimesheetDaySchema],
+  hourlyRate: {
+    type: Number,
+    default: null,
+    min: 0,
+  },
   updatedAt: {
     type: Date,
     default: Date.now,

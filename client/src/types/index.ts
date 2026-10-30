@@ -28,5 +28,6 @@ export interface Timesheet {
   year: number;
   month: number;
   days: TimesheetDay[];
+  hourlyRate: number | null;
   updatedAt: string;
 }

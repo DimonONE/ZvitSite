@@ -42,6 +42,9 @@ const MONTH_NAMES = [
   'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
 ];
 
+const formatMoney = (value: number) =>
+  value.toLocaleString('uk-UA', { maximumFractionDigits: 2 });
+
 const selectClass =
   'bg-white border border-[#e5e8ed] h-10 px-3 rounded-lg w-full text-[#1c2126] text-sm outline-none focus:border-[#21ba6b]';
 
@@ -62,6 +65,8 @@ const WorkDaysForm = () => {
 
   const [days, setDays] = useState<DayEntry[]>(() => generateDays(year, month));
   const [quickFillHours, setQuickFillHours] = useState(11);
+  // Ставка за годину як рядок з поля вводу ('' — не задана).
+  const [rateInput, setRateInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -134,6 +139,15 @@ const WorkDaysForm = () => {
           return match && match.hours !== undefined ? { ...entry, hours: match.hours } : entry;
         })
       );
+      // Якщо для цього місяця ставку ще не задано — підставляємо останню відому
+      // (спершу з цього ж місця, потім з будь-якого).
+      const withRate = sheets.filter((s) => s.hourlyRate != null);
+      const rate =
+        data.hourlyRate ??
+        withRate.find((s) => s.cityId === cityId)?.hourlyRate ??
+        withRate[0]?.hourlyRate ??
+        null;
+      setRateInput(rate == null ? '' : String(rate));
       setDirty(false);
     } catch (error) {
       console.error('Failed to load timesheet:', error);
@@ -238,13 +252,26 @@ const WorkDaysForm = () => {
   };
 
   const totalHours = days.reduce((sum, d) => sum + (d.hours ?? 0), 0);
+  const hourlyRate = rateInput.trim() === '' ? null : Number(rateInput.replace(',', '.'));
+  const rateValid = hourlyRate === null || (Number.isFinite(hourlyRate) && hourlyRate >= 0);
+  const earnings = hourlyRate !== null && rateValid ? totalHours * hourlyRate : null;
+
+  const handleRateChange = (value: string) => {
+    setDirty(true);
+    setRateInput(value);
+  };
 
   const handleSave = async () => {
     if (!employeeId) return;
+    if (!rateValid) {
+      alert('Некоректна ставка за годину');
+      return;
+    }
     setSaving(true);
     try {
       const payload: Partial<Timesheet> = {
         days: days.map(({ day, hours }) => ({ day, hours })) as Timesheet['days'],
+        hourlyRate,
       };
       await updateTimesheet(employeeId, year, month, payload, cityId);
       setDirty(false);
@@ -466,6 +493,7 @@ const WorkDaysForm = () => {
                 }`}
               >
                 {MONTH_NAMES[s.month - 1]} {s.year} · {sheetCity} · {s.totalHours} год
+                {s.hourlyRate != null && ` · ${formatMoney(s.totalHours * s.hourlyRate)}`}
               </button>
             );
           })}
@@ -573,6 +601,38 @@ const WorkDaysForm = () => {
           <span className="text-[11px]">
             — скопіювати години цього дня на наступний день. Позначте кілька днів чекбоксом, щоб задати години масово через панель вище.
           </span>
+        </div>
+
+        {/* Ставка і підсумок виплати за місяць */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 sm:items-end bg-[#f2fcf5] border border-[#e5f7eb] rounded-xl px-4 py-3.5">
+          <label className="flex flex-col gap-1.5 sm:w-[180px]">
+            <span className="text-[#737a85] text-xs font-medium">Ставка за годину</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={rateInput}
+              onChange={(e) => handleRateChange(e.target.value)}
+              placeholder="0"
+              className={`${selectClass} ${rateValid ? '' : '!border-red-400'}`}
+            />
+          </label>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[#737a85] text-xs font-medium">Годин за місяць</span>
+            <span className="text-[#1c2126] text-base font-semibold h-10 flex items-center">
+              {totalHours} год
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[#737a85] text-xs font-medium">Заробіток за місяць</span>
+            <span className="text-[#21ba6b] text-xl font-bold h-10 flex items-center">
+              {earnings === null ? '—' : formatMoney(earnings)}
+            </span>
+          </div>
+          {earnings !== null && (
+            <span className="text-[#737a85] text-xs sm:ml-auto sm:mb-3">
+              {totalHours} год × {formatMoney(hourlyRate ?? 0)}
+            </span>
+          )}
         </div>
 
         {/* Actions: equal-width side-by-side buttons on mobile, fixed-width row on desktop */}
