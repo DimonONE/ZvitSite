@@ -3,7 +3,12 @@ import multer from 'multer';
 import { getCityEmployees } from '../controllers/employeeController';
 import { getTimesheet, updateTimesheet, importTimesheetPhoto } from '../controllers/timesheetController';
 import { exportTimesheetToExcel, exportCityMonthToExcel, getCityMonthJson } from '../controllers/exportController';
-import { previewCitySheetPhoto, confirmCitySheetImport } from '../controllers/citySheetController';
+import {
+  previewCitySheetPhoto,
+  previewCitySheetText,
+  getManualCitySheetPrompt,
+  confirmCitySheetImport,
+} from '../controllers/citySheetController';
 
 const router = Router();
 
@@ -35,6 +40,9 @@ router.post(
 );
 // Крок 1: тільки розпізнати і показати прев'ю — нічого не пишемо в базу.
 router.post('/import-city-sheet-photo', photoUpload.single('photo'), previewCitySheetPhoto);
+// Той самий крок 1 без витрат токенів: відповідь чужої нейронки, вставлена текстом.
+router.get('/import-city-sheet-prompt', getManualCitySheetPrompt);
+router.post('/import-city-sheet-text', previewCitySheetText);
 // Крок 2: користувач підтвердив прев'ю — тільки тепер створюємо
 // працівників, яких не було в базі, і зберігаємо табель.
 router.post('/import-city-sheet-photo/confirm', confirmCitySheetImport);

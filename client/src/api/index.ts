@@ -137,6 +137,14 @@ export const previewCitySheetPhoto = (
   });
 };
 
+// Крок 1 без токенів: промпт для безкоштовної нейронки і розбір її відповіді,
+// яку користувач вставив текстом. Повертає таке саме прев'ю, як і для фото.
+export const getManualCitySheetPrompt = () =>
+  api.get<{ prompt: string }>('/cities/import-city-sheet-prompt');
+
+export const previewCitySheetText = (text: string) =>
+  api.post<CitySheetPreviewResult>('/cities/import-city-sheet-text', { text });
+
 // Крок 2 — користувач підтвердив прев'ю: тільки тепер створюємо
 // працівників, яких не було в базі, і зберігаємо табель за місяць.
 export const confirmCitySheetImport = (data: {

@@ -3,7 +3,12 @@ import Employee from '../models/Employee';
 import City from '../models/City';
 import Timesheet from '../models/Timesheet';
 import { generateTimesheetDays } from '../utils/timesheetUtils';
-import { parseCitySheetPhoto } from '../services/aiCitySheetParser';
+import {
+  parseCitySheetPhoto,
+  parseCitySheetText,
+  MANUAL_CITY_SHEET_PROMPT,
+  ParsedCitySheet,
+} from '../services/aiCitySheetParser';
 import { namesLooselyMatch, findBestNameMatch } from '../utils/nameMatch';
 
 // ---- КРОК 1: preview -----------------------------------------------------
@@ -25,64 +30,7 @@ export const previewCitySheetPhoto = async (req: Request, res: Response) => {
     const fallbackCityId = req.body.cityId || undefined;
 
     const parsed = await parseCitySheetPhoto(file.buffer, file.mimetype);
-
-    const year = parsed.year ?? fallbackYear;
-    const month = parsed.month ?? fallbackMonth;
-
-    if (!year || !month) {
-      return res.status(422).json({
-        error: 'Could not detect month/year from the photo',
-        needsManualDate: true,
-        parsed,
-      });
-    }
-
-    // Визначаємо місто: явно передане клієнтом, або те, що розпізнав AI
-    // з шапки фото.
-    let resolvedCity: { _id: string; name: string } | null = null;
-    if (fallbackCityId) {
-      const c = await City.findById(fallbackCityId);
-      if (c) resolvedCity = { _id: String(c._id), name: c.name };
-    } else if (parsed.cityName) {
-      const cities = await City.find();
-      // Фотографія майже ніколи не розпізнається побуквенно точно (діакритика,
-      // пробіли, окремі букви в адресі), тож шукаємо найбільш схожу назву,
-      // а не вимагаємо ідентичного тексту.
-      const match = findBestNameMatch(cities, parsed.cityName, (c) => c.name);
-      if (match) resolvedCity = { _id: String(match._id), name: match.name };
-    }
-
-    // Працівник може працювати в кількох місцях, тому шукаємо збіги серед ВСІХ
-    // працівників, але спершу серед «домашніх» працівників цього міста.
-    // Нічого при цьому не змінюємо і не створюємо.
-    const allEmployees = await Employee.find();
-    const cityEmployees = resolvedCity
-      ? allEmployees.filter((e) => String(e.cityId) === resolvedCity!._id)
-      : [];
-
-    const rows = parsed.employees.map((recognized) => {
-      const employee =
-        cityEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name)) ??
-        allEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name));
-      const totalHours = recognized.hours.reduce((sum: number, h) => sum + (h ?? 0), 0);
-      return {
-        recognizedName: recognized.name,
-        hours: recognized.hours,
-        totalHours,
-        photoTotal: recognized.total,
-        matchedEmployeeId: employee ? String(employee._id) : null,
-        matchedEmployeeName: employee ? employee.fullName : null,
-      };
-    });
-
-    res.json({
-      year,
-      month,
-      totalDays: rows[0]?.hours.length ?? new Date(year, month, 0).getDate(),
-      detectedCityName: parsed.cityName,
-      resolvedCity,
-      rows,
-    });
+    await sendPreview(res, parsed, fallbackYear, fallbackMonth, fallbackCityId);
   } catch (error) {
     console.error('Failed to preview city sheet photo:', error);
     res.status(500).json({
@@ -90,6 +38,106 @@ export const previewCitySheetPhoto = async (req: Request, res: Response) => {
       details: error instanceof Error ? error.message : String(error),
     });
   }
+};
+
+// ---- КРОК 1 (ручний режим) -------------------------------------------------
+// Коли токенів нема: користувач сам відправив фото в безкоштовну нейронку з
+// нашим промптом і вставив її відповідь. Далі все так само, як із фото.
+export const getManualCitySheetPrompt = (_req: Request, res: Response) => {
+  res.json({ prompt: MANUAL_CITY_SHEET_PROMPT });
+};
+
+export const previewCitySheetText = async (req: Request, res: Response) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text : '';
+  if (!text.trim()) {
+    return res.status(400).json({ error: 'text is required' });
+  }
+  let parsed: ParsedCitySheet;
+  try {
+    parsed = parseCitySheetText(text);
+  } catch (error) {
+    return res.status(422).json({
+      error: 'Invalid AI response',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+  try {
+    const fallbackYear = req.body.year ? parseInt(req.body.year) : undefined;
+    const fallbackMonth = req.body.month ? parseInt(req.body.month) : undefined;
+    await sendPreview(res, parsed, fallbackYear, fallbackMonth, undefined);
+  } catch (error) {
+    console.error('Failed to preview city sheet text:', error);
+    res.status(500).json({
+      error: 'Failed to build timesheet preview',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
+const sendPreview = async (
+  res: Response,
+  parsed: ParsedCitySheet,
+  fallbackYear: number | undefined,
+  fallbackMonth: number | undefined,
+  fallbackCityId: string | undefined
+) => {
+  const year = parsed.year ?? fallbackYear;
+  const month = parsed.month ?? fallbackMonth;
+
+  if (!year || !month) {
+    return res.status(422).json({
+      error: 'Could not detect month/year from the photo',
+      needsManualDate: true,
+      parsed,
+    });
+  }
+
+  // Визначаємо місто: явно передане клієнтом, або те, що розпізнав AI
+  // з шапки фото.
+  let resolvedCity: { _id: string; name: string } | null = null;
+  if (fallbackCityId) {
+    const c = await City.findById(fallbackCityId);
+    if (c) resolvedCity = { _id: String(c._id), name: c.name };
+  } else if (parsed.cityName) {
+    const cities = await City.find();
+    // Фотографія майже ніколи не розпізнається побуквенно точно (діакритика,
+    // пробіли, окремі букви в адресі), тож шукаємо найбільш схожу назву,
+    // а не вимагаємо ідентичного тексту.
+    const match = findBestNameMatch(cities, parsed.cityName, (c) => c.name);
+    if (match) resolvedCity = { _id: String(match._id), name: match.name };
+  }
+
+  // Працівник може працювати в кількох місцях, тому шукаємо збіги серед ВСІХ
+  // працівників, але спершу серед «домашніх» працівників цього міста.
+  // Нічого при цьому не змінюємо і не створюємо.
+  const allEmployees = await Employee.find();
+  const cityEmployees = resolvedCity
+    ? allEmployees.filter((e) => String(e.cityId) === resolvedCity!._id)
+    : [];
+
+  const rows = parsed.employees.map((recognized) => {
+    const employee =
+      cityEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name)) ??
+      allEmployees.find((e) => namesLooselyMatch(e.fullName, recognized.name));
+    const totalHours = recognized.hours.reduce((sum: number, h) => sum + (h ?? 0), 0);
+    return {
+      recognizedName: recognized.name,
+      hours: recognized.hours,
+      totalHours,
+      photoTotal: recognized.total,
+      matchedEmployeeId: employee ? String(employee._id) : null,
+      matchedEmployeeName: employee ? employee.fullName : null,
+    };
+  });
+
+  res.json({
+    year,
+    month,
+    totalDays: rows[0]?.hours.length ?? new Date(year, month, 0).getDate(),
+    detectedCityName: parsed.cityName,
+    resolvedCity,
+    rows,
+  });
 };
 
 // ---- КРОК 2: confirm -------------------------------------------------------

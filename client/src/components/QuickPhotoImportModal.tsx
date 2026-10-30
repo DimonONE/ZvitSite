@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   previewCitySheetPhoto,
+  previewCitySheetText,
+  getManualCitySheetPrompt,
   confirmCitySheetImport,
   getCityEmployees,
   exportCityMonth,
@@ -53,6 +55,14 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
   const [saved, setSaved] = useState<CitySheetConfirmResult | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
+  // 'photo' — розпізнаємо на сервері (витрачає токени);
+  // 'text' — користувач сам відправив фото в безкоштовну нейронку і вставляє її відповідь.
+  const [mode, setMode] = useState<'photo' | 'text'>('photo');
+  const [aiText, setAiText] = useState('');
+  const [manualPrompt, setManualPrompt] = useState('');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+
   // Якщо фото розпізналось як вже існуюче місце — підвантажуємо його
   // працівників, щоб можна було вручну прив'язати рядок до когось із них
   // замість створення нового. Для нового місця (якого ще нема в базі)
@@ -81,23 +91,7 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
     setError(null);
     try {
       const response = await previewCitySheetPhoto(file);
-      const data = response.data;
-      setPreview(data);
-      setDrafts({});
-      // Місце береться автоматично з фото: якщо таке вже є в базі —
-      // береться його точна назва з бази, інакше — те, що розпізналось.
-      setCityName(data.resolvedCity?.name || data.detectedCityName || '');
-      setRows(
-        data.rows.map((r) => ({
-          recognizedName: r.recognizedName,
-          hours: r.hours,
-          totalHours: r.totalHours,
-          photoTotal: r.photoTotal ?? null,
-          employeeId: r.matchedEmployeeId || '',
-          skip: false,
-        }))
-      );
-      setStep('preview');
+      applyPreview(response.data);
     } catch (err: any) {
       console.error('Failed to preview city sheet photo:', err);
       const detail = err?.response?.data?.error;
@@ -109,6 +103,64 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const applyPreview = (data: CitySheetPreviewResult) => {
+    setPreview(data);
+    setDrafts({});
+    // Місце береться автоматично з фото: якщо таке вже є в базі —
+    // береться його точна назва з бази, інакше — те, що розпізналось.
+    setCityName(data.resolvedCity?.name || data.detectedCityName || '');
+    setRows(
+      data.rows.map((r) => ({
+        recognizedName: r.recognizedName,
+        hours: r.hours,
+        totalHours: r.totalHours,
+        photoTotal: r.photoTotal ?? null,
+        employeeId: r.matchedEmployeeId || '',
+        skip: false,
+      }))
+    );
+    setStep('preview');
+  };
+
+  // Ручний режим (коли нема токенів): промпт підвантажується з сервера,
+  // щоб він завжди збігався з тим, що вміє розбирати сервер.
+  useEffect(() => {
+    if (mode !== 'text' || manualPrompt) return;
+    getManualCitySheetPrompt()
+      .then((res) => setManualPrompt(res.data.prompt))
+      .catch((err) => console.error('Failed to load manual prompt:', err));
+  }, [mode, manualPrompt]);
+
+  const handleCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(manualPrompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch {
+      setShowPrompt(true); // буфер обміну недоступний — нехай скопіюють вручну
+    }
+  };
+
+  const handleTextSubmit = async () => {
+    if (!aiText.trim()) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const response = await previewCitySheetText(aiText);
+      applyPreview(response.data);
+    } catch (err: any) {
+      console.error('Failed to preview city sheet text:', err);
+      const detail = err?.response?.data?.error;
+      setError(
+        detail === 'Could not detect month/year from the photo'
+          ? 'У відповіді немає дати («date») — допишіть її вручну у форматі "1.09.2026" і спробуйте ще раз.'
+          : 'Не вдалося розібрати відповідь. Вставте її повністю — це має бути JSON, отриманий за промптом нижче.'
+      );
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -204,6 +256,88 @@ const QuickPhotoImportModal = ({ onClose, onDataChanged }: QuickPhotoImportModal
         </div>
 
         {step === 'upload' && (
+          <>
+            <div className="flex bg-[#f5f6f8] rounded-lg p-1 gap-1">
+              {([
+                ['photo', '📷 Фото'],
+                ['text', '📋 Вставити відповідь ІІ'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setMode(value);
+                    setError(null);
+                  }}
+                  className={`flex-1 h-9 rounded-md text-sm font-semibold ${
+                    mode === value ? 'bg-white text-[#1c2126] shadow-sm' : 'text-[#737a85]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {step === 'upload' && mode === 'text' && (
+          <>
+            <ol className="text-[#737a85] text-sm list-decimal pl-5 flex flex-col gap-1">
+              <li>Скопіюйте промпт нижче.</li>
+              <li>
+                Відкрийте будь-яку безкоштовну нейронку (ChatGPT, Gemini, Claude тощо), прикріпіть
+                фото табеля і відправте разом із промптом.
+              </li>
+              <li>Скопіюйте її відповідь повністю і вставте в поле нижче.</li>
+            </ol>
+
+            <div className="border border-[#e5e8ed] rounded-lg">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[#f5f6f8] rounded-t-lg">
+                <button
+                  type="button"
+                  onClick={() => setShowPrompt((v) => !v)}
+                  className="text-sm font-semibold text-[#1c2126]"
+                >
+                  {showPrompt ? '▾' : '▸'} Промпт для нейронки
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyPrompt}
+                  disabled={!manualPrompt}
+                  className="h-8 px-3 rounded-md bg-[#21ba6b] text-white text-xs font-semibold disabled:opacity-40"
+                >
+                  {promptCopied ? '✓ Скопійовано' : '📋 Копіювати промпт'}
+                </button>
+              </div>
+              {showPrompt && (
+                <textarea
+                  readOnly
+                  value={manualPrompt || 'Завантаження...'}
+                  onFocus={(e) => e.target.select()}
+                  className="w-full h-48 p-3 text-xs font-mono text-[#1c2126] bg-white rounded-b-lg resize-y outline-none"
+                />
+              )}
+            </div>
+
+            <textarea
+              value={aiText}
+              onChange={(e) => setAiText(e.target.value)}
+              placeholder='Вставте сюди відповідь нейронки — JSON вигляду { "cityName": ..., "date": ..., "rows": [...] }'
+              className="w-full h-40 p-3 text-xs font-mono bg-[#fafafc] border border-[#e5e8ed] rounded-lg resize-y"
+            />
+            <button
+              type="button"
+              onClick={handleTextSubmit}
+              disabled={uploading || !aiText.trim()}
+              className="h-11 rounded-lg text-sm font-semibold bg-[#21ba6b] text-white disabled:opacity-40"
+            >
+              {uploading ? '⏳ Обробляємо...' : 'Показати прев\'ю'}
+            </button>
+            {error && <p className="text-red-600 text-xs">{error}</p>}
+          </>
+        )}
+
+        {step === 'upload' && mode === 'photo' && (
           <>
             <p className="text-[#737a85] text-sm">
               Сфотографуйте зведений табель по місту — місце, місяць і кожного працівника

@@ -423,6 +423,73 @@ const parseSheetDate = (date: unknown): { year: number | null; month: number | n
   };
 };
 
+const toParsedSheet = (raw: any, rows: RawRow[]): ParsedCitySheet => {
+  const { year, month } = parseSheetDate(raw.date);
+  const totalDays = year && month ? daysInMonth(year, month) : SHEET_COLUMNS;
+  return {
+    cityName: typeof raw.cityName === 'string' && raw.cityName.trim() ? raw.cityName.trim() : null,
+    year,
+    month,
+    employees: rows.map((row) => ({
+      name: row.name,
+      hours: row.cells.slice(0, totalDays).map(parseCellToken),
+      total: row.total,
+    })),
+  };
+};
+
+/**
+ * Промпт для ручного режиму: користувач сам відправляє фото в будь-яку
+ * (зокрема безкоштовну) нейронку разом із цим текстом, а відповідь вставляє
+ * в модалку — без витрат токенів на сервері.
+ */
+export const MANUAL_CITY_SHEET_PROMPT = `You are transcribing the attached photo of a paper timesheet EXACTLY, cell by cell, like a scanner.
+
+Layout:
+- Header: "místo:" = place/city name (handwritten), "nástup:" = start date of the month (handwritten, e.g. "1.09.2026").
+- Table: column "Jméno" = employee name, then ${SHEET_COLUMNS} day columns numbered 1. … 31., then the "Hod. celkem" column = handwritten row total (e.g. "295,5h" -> 295.5; ignore the trailing "h").
+
+${CELL_RULES}
+
+Reply with ONLY one JSON object, no explanations, in exactly this format:
+{
+  "cityName": "Moskevska 49",
+  "date": "1.09.2026",
+  "rows": [
+    { "name": "Novak Petr", "cells": ["11.5", "11.5", "X", "", "10", ...], "total": 295.5 }
+  ]
+}
+
+Rules for the JSON:
+- "cityName": the place name as written; "date": the "nástup" date as written. Use null if not present.
+- "rows": EVERY employee row that has a name, in the order of the sheet, even if all its cells are blank.
+- "cells": EXACTLY ${SHEET_COLUMNS} strings per row — day 1 first, day 31 last. Write all ${SHEET_COLUMNS}, never use "...".
+- "total": the number in "Hod. celkem" for that row, or null if blank/unreadable. Copy it from the sheet; never compute it yourself.`;
+
+/**
+ * Розбирає відповідь, яку користувач скопіював із чужої нейронки (див.
+ * MANUAL_CITY_SHEET_PROMPT). Відповідь буває обгорнута в ```json і пояснення,
+ * тож беремо JSON-об'єкт від першої «{» до останньої «}».
+ */
+export const parseCitySheetText = (text: string): ParsedCitySheet => {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) {
+    throw new Error('No JSON object found in the AI response');
+  }
+  let raw: any;
+  try {
+    raw = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    throw new Error('Failed to parse AI response as JSON');
+  }
+  const rows = toRows(Array.isArray(raw?.rows) ? raw.rows : []);
+  if (rows.length === 0) {
+    throw new Error('AI response did not contain any employees');
+  }
+  return toParsedSheet(raw, rows);
+};
+
 /**
  * Розпізнає фото зведеного табеля по місту: перший рядок — номери днів (1..31),
  * зліва — прізвища працівників, у клітинках — кількість годин або "x".
@@ -491,16 +558,5 @@ export const parseCitySheetPhoto = async (
     );
   }
 
-  const employees: ParsedCitySheetEmployee[] = rows.map((row) => ({
-    name: row.name,
-    hours: row.cells.slice(0, totalDays).map(parseCellToken),
-    total: row.total,
-  }));
-
-  return {
-    cityName: typeof raw.cityName === 'string' && raw.cityName.trim() ? raw.cityName.trim() : null,
-    year,
-    month,
-    employees,
-  };
+  return toParsedSheet(raw, rows);
 };
