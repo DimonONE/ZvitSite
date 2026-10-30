@@ -1,7 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getTimesheet, updateTimesheet, getCities, getEmployee } from '../api';
-import { Timesheet, City } from '../types';
+import {
+  getTimesheet,
+  updateTimesheet,
+  getCities,
+  getEmployee,
+  getCityEmployees,
+  listEmployeeTimesheets,
+  TimesheetSummary,
+} from '../api';
+import { Timesheet, City, Employee } from '../types';
 import TimesheetPhotoImport from '../components/TimesheetPhotoImport';
 
 interface DayEntry {
@@ -29,83 +37,170 @@ const generateDays = (year: number, month: number): DayEntry[] => {
   });
 };
 
+const MONTH_NAMES = [
+  'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+  'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
+];
+
+const selectClass =
+  'bg-white border border-[#e5e8ed] h-10 px-3 rounded-lg w-full text-[#1c2126] text-sm outline-none focus:border-[#21ba6b]';
+
 const WorkDaysForm = () => {
   const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Місто (місце роботи), для якого редагуємо табель. Без нього — «домашнє»
-  // місто працівника. Місяць/рік можна передати як ?year=&month=.
+  // місто працівника. Місяць/рік — ?year=&month=; без них відкриваємо
+  // найновіший збережений табель (а якщо його нема — поточний місяць).
   const cityIdParam = searchParams.get('cityId') || undefined;
+  const yearParam = Number(searchParams.get('year')) || undefined;
+  const monthParam = Number(searchParams.get('month')) || undefined;
 
   const [currentDate] = useState(new Date());
-  const year = Number(searchParams.get('year')) || currentDate.getFullYear();
-  const month = Number(searchParams.get('month')) || currentDate.getMonth() + 1;
+  const year = yearParam ?? currentDate.getFullYear();
+  const month = monthParam ?? currentDate.getMonth() + 1;
 
   const [days, setDays] = useState<DayEntry[]>(() => generateDays(year, month));
   const [quickFillHours, setQuickFillHours] = useState(11);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [cityName, setCityName] = useState<string>('');
-  const [employeeName, setEmployeeName] = useState<string>('');
+  const [dirty, setDirty] = useState(false);
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [cityEmployees, setCityEmployees] = useState<Employee[]>([]);
+  const [sheets, setSheets] = useState<TimesheetSummary[]>([]);
+  // Табель можна вантажити лише коли визначено місто/місяць (див. перший ефект).
+  const [ready, setReady] = useState(false);
 
+  const cityId = cityIdParam ?? employee?.cityId;
+  const cityName = cities.find((c) => c._id === cityId)?.name ?? '';
+  const employeeName = employee?.fullName ?? '';
+
+  // 1) Працівник, міста і список його табелів. Якщо місяць не задано в URL —
+  //    відкриваємо найновіший збережений табель цього місця (або будь-якого
+  //    місця, якщо місто теж не задано).
   useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, cityIdParam, year, month]);
+    if (!employeeId) return;
+    let cancelled = false;
+    setReady(false);
+    (async () => {
+      try {
+        const [employeeRes, citiesRes, sheetsRes] = await Promise.all([
+          getEmployee(employeeId),
+          getCities(),
+          listEmployeeTimesheets(employeeId),
+        ]);
+        if (cancelled) return;
+        setEmployee(employeeRes.data);
+        setCities(citiesRes.data);
+        setSheets(sheetsRes.data);
 
-  const loadData = async () => {
-    console.log('Loading data for employeeId:', employeeId);
-    if (!employeeId) {
-      setLoading(false);
-      return;
-    }
+        if (!yearParam || !monthParam) {
+          const targetCity = cityIdParam ?? employeeRes.data.cityId;
+          const latest =
+            sheetsRes.data.find((s) => s.cityId === targetCity) ??
+            (cityIdParam ? undefined : sheetsRes.data[0]);
+          if (latest) {
+            setSearchParams(
+              { cityId: latest.cityId, year: String(latest.year), month: String(latest.month) },
+              { replace: true }
+            );
+          }
+        }
+        setReady(true);
+      } catch (error) {
+        console.error('Failed to load employee:', error);
+        alert('Помилка завантаження даних');
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employeeId]);
+
+  // 2) Сам табель для обраних працівника + місця + місяця.
+  const loadTimesheet = async (isCancelled: () => boolean = () => false) => {
+    if (!employeeId || !cityId) return;
     setLoading(true);
     try {
-      // Завантажуємо дані паралельно
-      const [employeeResponse, timesheetResponse] = await Promise.all([
-        getEmployee(employeeId),
-        getTimesheet(employeeId, year, month, cityIdParam),
-      ]);
-
-      console.log('Employee response:', employeeResponse.data);
-      console.log('Timesheet response:', timesheetResponse.data);
-
-      const employee = employeeResponse.data;
-      setEmployeeName(employee.fullName);
-
-      // Тепер завантажуємо місто за cityId працівника
-      const citiesResponse = await getCities();
-      const city = citiesResponse.data.find((c: City) => c._id === (cityIdParam ?? employee.cityId));
-      if (city) {
-        setCityName(city.name);
-      }
-
-      const fetchedDays = (timesheetResponse.data.days ?? []) as Array<{
-        day: number;
-        hours?: number | null;
-        status?: string;
-      }>;
-
+      const { data } = await getTimesheet(employeeId, year, month, cityId);
+      if (isCancelled()) return;
+      const fetchedDays = (data.days ?? []) as Array<{ day: number; hours?: number | null }>;
       setDays(
         generateDays(year, month).map((entry) => {
           const match = fetchedDays.find((fd) => fd.day === entry.day);
-          return match && match.hours !== undefined
-            ? { ...entry, hours: match.hours }
-            : entry;
+          return match && match.hours !== undefined ? { ...entry, hours: match.hours } : entry;
         })
       );
+      setDirty(false);
     } catch (error) {
-      console.error('Failed to load data:', error);
-      alert('Помилка завантаження даних');
+      console.error('Failed to load timesheet:', error);
+      alert('Помилка завантаження табеля');
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    loadTimesheet(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, employeeId, cityId, year, month]);
+
+  // 3) Працівники обраного місця — для швидкого перемикання між ними.
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getCityEmployees(cityId)
+      .then(({ data }) => {
+        if (!cancelled) setCityEmployees(data);
+      })
+      .catch((error) => console.error('Failed to load city employees:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
+
+  // Поточний працівник завжди є у списку, навіть якщо в цьому місці він ще не працював.
+  const employeeOptions = useMemo(() => {
+    const list = [...cityEmployees].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    if (employee && !list.some((e) => e._id === employee._id)) list.unshift(employee);
+    return list;
+  }, [cityEmployees, employee]);
+
+  const goTo = (next: { employeeId?: string; cityId?: string; year?: number; month?: number }) => {
+    if (dirty && !window.confirm('Є незбережені зміни. Перейти без збереження?')) return;
+    const params = new URLSearchParams({
+      cityId: next.cityId ?? cityId ?? '',
+      year: String(next.year ?? year),
+      month: String(next.month ?? month),
+    });
+    navigate(`/employees/${next.employeeId ?? employeeId}/timesheet?${params}`, { replace: true });
+  };
+
+  const shiftMonth = (delta: number) => {
+    const d = new Date(year, month - 1 + delta, 1);
+    goTo({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  };
+
+  const yearOptions = useMemo(() => {
+    const now = currentDate.getFullYear();
+    const set = new Set<number>([year, ...sheets.map((s) => s.year)]);
+    for (let y = now - 2; y <= now + 1; y++) set.add(y);
+    return [...set].sort((a, b) => a - b);
+  }, [sheets, year, currentDate]);
 
   const handlePhotoImported = () => {
     // Дані вже збережені в MongoDB на бекенді — просто перезавантажуємо форму,
     // щоб побачити розпізнані години.
-    loadData();
+    loadTimesheet();
+    if (employeeId) listEmployeeTimesheets(employeeId).then(({ data }) => setSheets(data));
   };
 
   const selectedCount = useMemo(() => days.filter((d) => d.selected).length, [days]);
@@ -118,12 +213,14 @@ const WorkDaysForm = () => {
 
   const setHours = (day: number, value: string) => {
     const parsed = value === '' ? null : Math.max(0, Math.min(24, Number(value)));
+    setDirty(true);
     setDays((prev) =>
       prev.map((d) => (d.day === day ? { ...d, hours: parsed } : d))
     );
   };
 
   const copyToNextDay = (day: number) => {
+    setDirty(true);
     setDays((prev) => {
       const current = prev.find((d) => d.day === day);
       if (!current) return prev;
@@ -134,18 +231,13 @@ const WorkDaysForm = () => {
   };
 
   const applyQuickFill = () => {
+    setDirty(true);
     setDays((prev) =>
       prev.map((d) => (d.selected ? { ...d, hours: quickFillHours } : d))
     );
   };
 
-  const getMonthName = (): string => {
-    const monthNames = [
-      'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
-      'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
-    ];
-    return monthNames[month - 1];
-  };
+  const totalHours = days.reduce((sum, d) => sum + (d.hours ?? 0), 0);
 
   const handleSave = async () => {
     if (!employeeId) return;
@@ -154,7 +246,8 @@ const WorkDaysForm = () => {
       const payload: Partial<Timesheet> = {
         days: days.map(({ day, hours }) => ({ day, hours })) as Timesheet['days'],
       };
-      await updateTimesheet(employeeId, year, month, payload, cityIdParam);
+      await updateTimesheet(employeeId, year, month, payload, cityId);
+      setDirty(false);
       navigate(-1);
     } catch (error) {
       console.error('Failed to save work days:', error);
@@ -242,7 +335,9 @@ const WorkDaysForm = () => {
     );
   };
 
-  if (loading) {
+  // Повноекранне «Завантаження» лише при першому відкритті; при перемиканні
+  // міста/місяця/працівника форма лишається на місці.
+  if (!employee) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-gray-500">Завантаження...</div>
@@ -279,24 +374,101 @@ const WorkDaysForm = () => {
         {/* Top fields: stacked on mobile, in a row from md */}
 
         <div className="flex flex-col md:flex-row gap-3 md:gap-5 items-stretch md:items-start">
-          <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
+          <label className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Місто</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
-              <span className="text-[#1c2126] text-sm">{cityName || 'Завантаження...'}</span>
-            </div>
-          </div>
+            <select
+              value={cityId ?? ''}
+              onChange={(e) => goTo({ cityId: e.target.value })}
+              className={selectClass}
+            >
+              {cities.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Дата (місяць)</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
-              <span className="text-[#1c2126] text-sm">{getMonthName()} {year}</span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => shiftMonth(-1)}
+                className="shrink-0 bg-white border border-[#e5e8ed] h-10 w-10 rounded-lg text-[#737a85]"
+                aria-label="Попередній місяць"
+              >
+                ‹
+              </button>
+              <select
+                value={month}
+                onChange={(e) => goTo({ month: Number(e.target.value) })}
+                className={selectClass}
+              >
+                {MONTH_NAMES.map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={year}
+                onChange={(e) => goTo({ year: Number(e.target.value) })}
+                className={`${selectClass} !w-[88px] shrink-0`}
+              >
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => shiftMonth(1)}
+                className="shrink-0 bg-white border border-[#e5e8ed] h-10 w-10 rounded-lg text-[#737a85]"
+                aria-label="Наступний місяць"
+              >
+                ›
+              </button>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 w-full md:w-[340px]">
+          <label className="flex flex-col gap-1.5 w-full md:w-[340px]">
             <span className="text-[#737a85] text-xs font-medium">Працівник</span>
-            <div className="bg-[#fafafc] border border-[#e5e8ed] h-10 flex items-center px-3 rounded-lg w-full">
-              <span className="text-[#1c2126] text-sm">{employeeName || 'Завантаження...'}</span>
-            </div>
-          </div>
+            <select
+              value={employeeId}
+              onChange={(e) => goTo({ employeeId: e.target.value })}
+              className={selectClass}
+            >
+              {employeeOptions.map((e) => (
+                <option key={e._id} value={e._id}>
+                  {e.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* Збережені табелі працівника в усіх місцях — перехід в один клік */}
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[#737a85] text-xs font-medium mr-1">Збережені табелі:</span>
+          {sheets.length === 0 && <span className="text-[#737a85] text-xs">ще немає</span>}
+          {sheets.map((s) => {
+            const active = s.cityId === cityId && s.year === year && s.month === month;
+            const sheetCity = cities.find((c) => c._id === s.cityId)?.name ?? '—';
+            return (
+              <button
+                key={`${s.cityId}-${s.year}-${s.month}`}
+                type="button"
+                onClick={() => goTo({ cityId: s.cityId, year: s.year, month: s.month })}
+                className={`h-7 px-2.5 rounded-md border text-xs whitespace-nowrap ${
+                  active
+                    ? 'bg-[#e5f7eb] border-[#21ba6b] text-[#1c2126] font-semibold'
+                    : 'bg-white border-[#e5e8ed] text-[#737a85] hover:border-[#21ba6b]'
+                }`}
+              >
+                {MONTH_NAMES[s.month - 1]} {s.year} · {sheetCity} · {s.totalHours} год
+              </button>
+            );
+          })}
         </div>
 
         {/* Quick fill panel — mobile: compact row, count folded into the button label */}
@@ -373,15 +545,21 @@ const WorkDaysForm = () => {
             employeeId={employeeId}
             year={year}
             month={month}
-            cityId={cityIdParam}
+            cityId={cityId}
             onImported={handlePhotoImported}
           />
         )}
 
-        <h2 className="text-[#1c2126] text-sm font-semibold">Дні місяця</h2>
+        <h2 className="text-[#1c2126] text-sm font-semibold">
+          Дні місяця <span className="text-[#737a85] font-medium">· разом {totalHours} год</span>
+        </h2>
 
         {/* Day grid: single column on mobile, two columns from md */}
-        <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-start">
+        <div
+          className={`flex flex-col md:flex-row gap-4 md:gap-6 items-start transition-opacity ${
+            loading ? 'opacity-40 pointer-events-none' : ''
+          }`}
+        >
           {columns.map((col, i) => (
             <div key={i} className="flex flex-col gap-1 flex-1 w-full">
               {col.map(renderDayRow)}

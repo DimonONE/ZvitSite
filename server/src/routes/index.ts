@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { getCityEmployees } from '../controllers/employeeController';
-import { getTimesheet, updateTimesheet, importTimesheetPhoto } from '../controllers/timesheetController';
+import {
+  getTimesheet,
+  updateTimesheet,
+  importTimesheetPhoto,
+  listEmployeeTimesheets,
+} from '../controllers/timesheetController';
 import { exportTimesheetToExcel, exportCityMonthToExcel, getCityMonthJson } from '../controllers/exportController';
 import {
   previewCitySheetPhoto,
@@ -30,6 +35,7 @@ const photoUpload = multer({
 router.get('/:cityId/employees', getCityEmployees);
 router.get('/:cityId/city-timesheet/:year/:month/export', exportCityMonthToExcel);
 router.get('/:cityId/city-timesheet/:year/:month', getCityMonthJson);
+router.get('/:employeeId/timesheets', listEmployeeTimesheets);
 router.get('/:employeeId/timesheets/:year/:month', getTimesheet);
 router.put('/:employeeId/timesheets/:year/:month', updateTimesheet);
 router.get('/:employeeId/timesheets/:year/:month/export', exportTimesheetToExcel);

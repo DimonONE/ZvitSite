@@ -41,6 +41,27 @@ export const getTimesheet = async (req: Request, res: Response) => {
   }
 };
 
+// Усі збережені табелі працівника (у всіх містах і місяцях) — для навігації
+// на сторінці редагування: від найновішого до найстарішого.
+export const listEmployeeTimesheets = async (req: Request, res: Response) => {
+  try {
+    const { employeeId } = req.params;
+    const timesheets = await Timesheet.find({ employeeId })
+      .select('cityId year month days')
+      .sort({ year: -1, month: -1 });
+    res.json(
+      timesheets.map((t) => ({
+        cityId: String(t.cityId),
+        year: t.year,
+        month: t.month,
+        totalHours: t.days.reduce((sum, d) => sum + (d.hours ?? 0), 0),
+      }))
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch timesheets' });
+  }
+};
+
 export const updateTimesheet = async (req: Request, res: Response) => {
   try {
     const { employeeId, year, month } = req.params;

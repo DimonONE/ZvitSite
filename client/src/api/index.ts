@@ -33,6 +33,17 @@ export const uploadEmployeePhoto = (id: string, file: File) => {
 // місцях). cityId необов'язковий: без нього сервер бере «домашнє» місто працівника.
 const cityQuery = (cityId?: string) => (cityId ? { params: { cityId } } : {});
 
+export interface TimesheetSummary {
+  cityId: string;
+  year: number;
+  month: number;
+  totalHours: number;
+}
+
+// Усі збережені табелі працівника (усі міста/місяці), від найновішого.
+export const listEmployeeTimesheets = (employeeId: string) =>
+  api.get<TimesheetSummary[]>(`/employees/${employeeId}/timesheets`);
+
 export const getTimesheet = (employeeId: string, year: number, month: number, cityId?: string) =>
   api.get<Timesheet>(`/employees/${employeeId}/timesheets/${year}/${month}`, cityQuery(cityId));
 export const updateTimesheet = (
